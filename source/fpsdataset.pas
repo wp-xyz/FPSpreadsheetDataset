@@ -1,0 +1,1067 @@
+{ Documentation used:
+  - https://www.delphipower.xyz/guide_8/building_custom_datasets.html
+  - http://etutorials.org/Programming/mastering+delphi+7/Part+III+Delphi+Database-Oriented+Architectures/Chapter+17+Writing+Database+Components/Building+Custom+Datasets/
+  - http://216.19.73.24/articles/customds.asp
+  - https://delphi.cjcsoft.net/viewthread.php?tid=44220
+}
+
+
+unit fpsDataset;
+
+{$mode ObjFPC}{$H+}
+
+interface
+
+uses
+  Classes, SysUtils, DB,
+  fpSpreadsheet, fpsTypes;
+
+type
+  TRowIndex = Int64;
+  TColIndex = Int64;
+
+  { TsFieldDef }
+  TsFieldDef = class(TFieldDef)
+  private
+    FColumn: TColIndex;
+  public
+    constructor Create(ACollection: TCollection); override;
+  published
+    property Column: TColIndex read FColumn write FColumn default -1;
+  end;
+
+  { TsFieldDefs }
+  TsFieldDefs = class(TFieldDefs)
+  protected
+    class function FieldDefClass : TFieldDefClass; override;
+  end;
+
+  { TsRecordInfo }
+  TsRecordInfo = record
+    Bookmark: TRowIndex;
+    BookmarkFlag: TBookmarkFlag;
+  end;
+  PsRecordInfo = ^TsRecordInfo;
+
+  { TsWorksheetDataset }
+  TsWorksheetDataset = class(TDataset)
+  private
+    FFileName: TFileName;
+    FSheetName: String;
+    FWorkbook: TsWorkbook;
+    FWorksheet: TsWorksheet;
+    FRecNo: Integer;                 // Current record number
+    FFirstRow: TRowIndex;            // WorksheetIndex of the first record
+    FLastRow: TRowIndex;             // Worksheet index of the last record
+    FRecordCount: Integer;           // Number of records between first and last data rows
+    FRecordBufferSize: Integer;      // Size of the record buffer
+    FDataSize: Integer;              // Total size of the field data
+    FFieldOffsets: array of Integer; // Offset to field start in buffer
+    FModified: Boolean;              // Flag to show that workbook needs saving
+    FFilterBuffer: TRecordBuffer;
+  private
+    function FixFieldName(const AText: String): String;
+    function GetActiveBuffer(out Buffer: TRecordBuffer): Boolean;
+    function GetCurrentRowIndex: TRowIndex;
+    function GetFirstDataRowIndex: TRowIndex;
+    function GetLastDataRowIndex: TRowIndex;
+    function GetRecordInfoPtr(Buffer: TRecordBuffer): PsRecordInfo;
+    function GetRowIndexFromRecNo(ARecNo: Integer): TRowIndex;
+    procedure SetCurrentRow(ARow: TRowIndex);
+  protected
+    // methods inherited from TDataset
+    function AllocRecordBuffer: TRecordBuffer; override;
+    procedure ClearCalcFields(Buffer: TRecordBuffer); override;
+    class function FieldDefsClass : TFieldDefsClass; override;
+    procedure FreeRecordBuffer(var Buffer: TRecordBuffer); override;
+    procedure GetBookmarkData(Buffer: TRecordBuffer; Data: Pointer); override;
+    function GetBookmarkFlag(Buffer: TRecordBuffer): TBookmarkFlag; override;
+    function GetRecNo: LongInt; override;
+    function GetRecord(Buffer: TRecordBuffer; GetMode: TGetMode;
+      DoCheck: Boolean): TGetResult; override;
+    function GetRecordCount: LongInt; override;
+    function GetRecordSize: Word; override;
+    procedure InternalClose; override;
+    procedure InternalFirst; override;
+    procedure InternalGotoBookmark(ABookmark: Pointer); override;
+    procedure InternalInitFieldDefs; override;
+    procedure InternalInitRecord(Buffer: TRecordBuffer); override;
+    procedure InternalLast; override;
+    procedure InternalOpen; override;
+    procedure InternalPost; override;
+    procedure InternalSetToRecord(Buffer: TRecordBuffer); override;
+    function IsCursorOpen: Boolean; override;
+    procedure SetBookmarkData(Buffer: TRecordBuffer; Data: Pointer); override;
+    procedure SetBookmarkFlag(Buffer: TRecordBuffer; Value: TBookmarkFlag); override;
+    procedure SetRecNo(Value: Integer); override;
+    // new methods
+    function ColIndexFromField(AField: TField): TColIndex;
+    function FilterRecord(Buffer: TRecordBuffer): Boolean;
+    function GetDataSize: Integer;
+    procedure LoadRecordToBuffer(Buffer: TRecordBuffer; ARecNo: Integer);
+    function LocateRecord(const KeyFields: string; const KeyValues: Variant;
+      Options: TLocateOptions; out ARecNo: integer): Boolean;
+    procedure SetFilterText({%H-}AValue: String);
+    procedure WriteBufferToWorksheet(Buffer: TRecordBuffer);
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    function BookmarkValid(ABookmark: TBookmark): Boolean; override;
+    function CompareBookmarks(Bookmark1, Bookmark2: TBookmark): Longint; override;
+    function GetFieldData(Field: TField; Buffer: Pointer): Boolean; override;
+    function Locate(const KeyFields: string; const KeyValues: Variant; Options: TLocateOptions): boolean; override;
+    procedure SetFieldData(Field: TField; Buffer: Pointer); override;
+    property Filter; unimplemented;  // Use OnFilter instead
+    property Modified: boolean read FModified;
+
+  // This section is to be removed after debugging.
+  public
+    // to be removed
+    property Buffers;
+    property BufferCount;
+
+  published
+    property FileName: TFileName read FFileName write FFileName;
+    property SheetName: String read FSheetName write FSheetName;
+
+    property Active;
+    property Filtered;
+    property AfterCancel;
+    property AfterClose;
+    property AfterOpen;
+    property AfterPost;
+    property AfterScroll;
+    property BeforeCancel;
+    property BeforeClose;
+    property BeforeOpen;
+    property BeforePost;
+    property BeforeScroll;
+    property OnFilterRecord;
+    property OnPostError;
+  end;
+
+implementation
+
+uses
+  Math, Variants;
+
+procedure ClearFieldIsNull(NullMask: PByte; const x: integer);
+begin
+  inc(NullMask,(x shr 3));
+  NullMask^ := NullMask^ or (1 shl (x and 7));
+end;
+
+procedure SetFieldIsNull(NullMask: PByte; const x: integer);
+begin
+  inc(NullMask,(x shr 3));
+  NullMask^ := NullMask^ and not (1 shl (x and 7));
+end;
+
+function GetFieldIsNull(NullMask: PByte; const x: integer): boolean;
+begin
+  inc(NullMask,(x shr 3));
+  Result := Nullmask^ and (1 shl (x and 7)) = 0;
+end;
+
+// TDataset does not expect date/time values in fields as TDateTime but as TDateTimeRec
+function DateTimeToNative(DataType: TFieldType; Data: TDateTime): TDateTimeRec;
+var
+  TimeStamp: TTimeStamp;
+begin
+  TimeStamp := DateTimeToTimeStamp(Data);
+  case DataType of
+    ftDate: Result.Date := TimeStamp.Date;
+    ftTime: Result.Time := TimeStamp.Time;
+    else    Result.DateTime := TimeStampToMSecs(TimeStamp);
+  end;
+end;
+
+{ TsFieldDef }
+
+constructor TsFieldDef.Create(ACollection: TCollection);
+begin
+  inherited;
+  FColumn := -1;
+end;
+
+{ TsFieldDefs }
+
+class function TsFieldDefs.FieldDefClass: TFieldDefClass;
+begin
+  Result := TsFieldDef;
+end;
+
+{ TsWorksheetDataset }
+
+constructor TsWorksheetDataset.Create(AOwner: TComponent);
+begin
+  inherited;
+  FRecordCount := -1;
+  FDataSize := -1;
+  FRecordBufferSize := -1;
+  FRecNo := -1;
+  BookmarkSize := SizeOf(TRowIndex);
+end;
+
+destructor TsWorksheetDataset.Destroy;
+begin
+  Close;
+  inherited;
+end;
+
+// Allocates a buffer for the dataset
+function TsWorksheetDataset.AllocRecordBuffer: TRecordBuffer;
+var
+  n: Integer;
+begin
+  n := GetRecordSize + CalcFieldsSize;
+  GetMem(Result, n);
+  FillChar(Result^, n, 0);
+end;
+
+// Returns whether the specified bookmark is valid, i.e. the worksheet row index
+// associated with the bookmark is between first and last data rows.
+function TsWorksheetDataset.BookmarkValid(ABookmark: TBookmark): Boolean;
+var
+  bm: TRowIndex;
+begin
+  Result := False;
+  if ABookMark=nil then exit;
+  bm := PPtrInt(ABookmark)^;
+  Result := (bm >= GetFirstDataRowIndex) and (bm <= GetLastDataRowIndex);
+end;
+
+procedure TsWorksheetDataset.ClearCalcFields(Buffer: TRecordBuffer);
+begin
+  FillChar(Buffer[RecordSize], CalcFieldsSize, 0);
+end;
+
+// Determines the worksheet column index for a specific field
+function TsWorksheetDataset.ColIndexFromField(AField: TField): TColIndex;
+var
+  fieldDef: TsFieldDef;
+begin
+  fieldDef := AField.FieldDef as TsFieldDef;
+  Result := fieldDef.Column;
+end;
+
+// Compares two bookmarks (row indices). This tricky handling of nil is
+// "borrowed" from TMemDataset
+function TsWorksheetDataset.CompareBookmarks(Bookmark1, Bookmark2: TBookmark): Longint;
+const
+  r: array[Boolean, Boolean] of ShortInt = ((2,-1),(1,0));
+begin
+  Result := r[Bookmark1=nil, Bookmark2=nil];
+  if Result = 2 then
+    Result := PPtrInt(Bookmark1)^ - PPtrInt(Bookmark2)^;
+end;
+
+// Returns the class to be used for FieldDefs. Is overridden to get access
+// to the worksheet column index of a field.
+class function TsWorksheetDataset.FieldDefsClass : TFieldDefsClass;
+begin
+  Result := TsFieldDefs;
+end;
+
+function TsWorksheetDataset.FilterRecord(Buffer: TRecordBuffer): Boolean;
+var
+  SaveState: TDatasetState;
+begin
+  Result := True;
+  if not Assigned(OnFilterRecord) then
+    Exit;
+  SaveState := SetTempState(dsFilter);
+  try
+    FFilterBuffer := Buffer;
+    OnFilterRecord(Self, Result);
+  finally
+    RestoreState(SaveState);
+  end;
+end;
+
+// Removes characters from AText which would make it an invalid fieldname.
+function TsWorksheetDataset.FixFieldName(const AText: String): String;
+var
+  ch: char;
+begin
+  Result := '';
+  for ch in AText do
+    if (ch in ['A'..'Z', 'a'..'z', '0'..'9']) then
+      Result := Result + ch;
+end;
+
+// Frees a record buffer.
+procedure TsWorksheetDataset.FreeRecordBuffer(var Buffer: TRecordBuffer);
+begin
+  FreeMem(Buffer);
+end;
+
+// Extracts the bookmark (worksheet row index) from the specified buffer.
+procedure TsWorksheetDataset.GetBookmarkData(Buffer: TRecordBuffer; Data: Pointer);
+begin
+  if Data <> nil then
+    PPtrInt(Data)^ := GetRecordInfoPtr(Buffer)^.Bookmark;
+end;
+
+// Returns the active buffer, depending on dataset's state.
+// Borrowed from TMemDataset.
+function TsWorksheetDataset.GetActiveBuffer(out Buffer: TRecordBuffer): Boolean;
+begin
+  case State of
+    dsEdit,
+    dsInsert:
+      Buffer := ActiveBuffer;
+    dsFilter:
+      Buffer := FFilterBuffer;
+    dsCalcFields:
+      Buffer := CalcBuffer;
+    else
+      if IsEmpty then
+        Buffer := nil
+      else
+        Buffer := ActiveBuffer;
+  end;
+  Result := (Buffer <> nil);
+end;
+
+// Extracts the bookmark flag from the specified buffer.
+function TsWorksheetDataset.GetBookmarkFlag(Buffer: TRecordBuffer): TBookmarkFlag;
+begin
+  Result := GetRecordInfoPtr(Buffer)^.BookmarkFlag;
+end;
+
+// Determines worksheet row index for the current record.
+function TsWorksheetDataset.GetCurrentRowIndex: TRowIndex;
+begin
+  Result := GetFirstDataRowIndex + FRecNo;
+end;
+
+// Returns the size of the data part in a buffer. This is the sume of all
+// field sizes.
+function TsWorksheetDataset.GetDataSize: Integer;
+var
+  f: TField;
+begin
+  if FDataSize = -1 then
+  begin
+    FDataSize := 0;
+    for f in Fields do
+      FDataSize := FDataSize + f.DataSize;
+  end;
+  Result := FDataSize;
+end;
+
+// Extracts the value of a specific field from the active buffer and copies
+// it to the raw field data memory to which Buffer points.
+// Adapted from TMemDataset
+function TsWorksheetDataset.GetFieldData(Field: TField; Buffer: Pointer): Boolean;
+var
+  srcBuffer: TRecordBuffer;
+  idx: Integer;
+  dt: TDateTime;
+  dtr: TDateTimeRec;
+begin
+  Result := GetActiveBuffer(srcBuffer);
+  if not Result then
+    exit;
+
+  idx := Field.FieldNo - 1;
+  if idx >= 0 then
+  begin
+//    Result := not GetFieldIsNull(pointer(srcBuffer), idx);
+//    if Result and Assigned(Buffer) then
+    if not IsEmpty and Assigned(Buffer) then
+    begin
+      inc(srcBuffer, FFieldOffsets[idx]);
+      if (Field.DataType in [ftDate, ftTime, ftDateTime]) then
+      begin
+        Move(srcBuffer^, dt, Field.DataSize);
+        dtr := DateTimeToNative(Field.DataType, dt);
+        Move(dtr, Buffer^, SizeOf(TDateTimeRec));
+      end else
+        Move(srcBuffer^, Buffer^, Field.DataSize);
+    end;
+  end else
+  begin  // Calculated, Lookup
+    inc(srcBuffer, RecordSize + Field.Offset);
+    Result := Boolean(SrcBuffer[0]);
+    if Result and Assigned(Buffer) then
+      Move(srcBuffer[1], Buffer^, Field.DataSize);
+  end;
+end;
+
+{
+function TsWorksheetDataset.GetFieldData(Field: TField; Buffer: Pointer): Boolean;
+var
+  P: PChar;
+  dt: TDateTime;
+  dtr: TDateTimeRec;
+begin
+  Result := false;
+  if (not IsEmpty) and Assigned(Buffer)  then
+  begin
+    P := ActiveBuffer;
+    inc(P, FFieldOffsets[Field.Index]);
+    if Assigned(Buffer) then
+      if (Field.DataType in [ftDate, ftTime, ftDateTime]) then
+      begin
+        Move(P^, dt, Field.DataSize);
+        dtr := DateTimeToNative(Field.DataType, dt);
+        Move(dtr, Buffer^, SizeOf(TTimeStamp));
+      end else
+        Move(P^, Buffer^, Field.DataSize);
+    Result := true;
+  end;
+end;
+}
+
+// Returns the worksheet row index of the record. This is the row
+// following the first worksheet row because that is reserved for the column
+// titles (field names).
+function TsWorksheetDataset.GetFirstDataRowIndex: TRowIndex;
+begin
+  Result := FFirstRow + 1;   // +1 because the first row contains the column titles.
+end;
+
+// Returns the worksheet row index of the record.
+function TsWorksheetDataset.GetLastDataRowIndex: TRowIndex;
+begin
+  Result := FLastRow;
+end;
+
+// Returns the number of the current record.
+function TsWorksheetDataset.GetRecNo: LongInt;
+begin
+  UpdateCursorPos;
+  if (FRecNo < 0) or (RecordCount = 0) or (State = dsInsert) then
+    Result := 0
+  else
+    Result := FRecNo + 1;
+end;
+
+function TsWorksheetDataset.GetRecord(Buffer: TRecordBuffer;
+  GetMode: TGetMode; DoCheck: Boolean): TGetResult;
+var
+  accepted: Boolean;
+begin
+  Result := grOK;
+  accepted := false;
+
+  if RecordCount < 1 then
+  begin
+    Result := grEOF;
+    exit;
+  end;
+
+  repeat
+    case GetMode of
+      gmCurrent:
+        if (FRecNo >= RecordCount) or (FRecNo < 0) then
+          Result := grError;
+      gmNext:
+        if (FRecNo < RecordCount - 1) then
+          inc(FRecNo)
+        else
+          Result := grEOF;
+      gmPrior:
+        if (FRecNo > 0) then
+          dec(FRecNo)
+        else
+          Result := grBOF;
+    end;
+
+    // Load the data
+    if Result = grOK then
+    begin
+      LoadRecordToBuffer(Buffer, FRecNo);
+      with GetRecordInfoPtr(Buffer)^ do
+      begin
+        Bookmark := GetCurrentRowIndex;
+        BookmarkFlag := bfCurrent;
+      end;
+      GetCalcFields(Buffer);
+      if Filtered then
+        accepted := FilterRecord(Buffer)    // Filtering
+      else
+        accepted := true;
+      if (GetMode = gmCurrent) and not accepted then
+        Result := grError;
+    end;
+  until (Result <> grOK) or accepted;
+
+  if (Result = grError) and DoCheck then
+    DatabaseError('[GetRecord] Invalid record.');
+end;
+
+function TsWorksheetDataset.GetRecordCount: LongInt;
+begin
+  //CheckActive;
+  if FRecordCount = -1 then
+    FRecordCount := GetLastDataRowIndex - GetFirstDataRowIndex + 1;
+  Result := FRecordCount;
+end;
+
+// Returns a pointer to the bookmark block inside the given buffer.
+function TsWorksheetDataset.GetRecordInfoPtr(Buffer: TRecordBuffer): PsRecordInfo;
+begin
+  Result := PsRecordInfo(Buffer + GetDataSize);
+end;
+
+// Determines the size of the full record buffer, data block plus record info
+function TsWorksheetDataset.GetRecordSize: Word;
+begin
+  if FRecordBufferSize = -1 then
+    FRecordBufferSize := GetDataSize + SizeOf(TsRecordInfo);
+  Result := FRecordBufferSize;
+end;
+
+function TsWorksheetDataset.GetRowIndexFromRecNo(ARecNo: Integer): TRowIndex;
+begin
+  Result := GetFirstDataRowIndex + ARecNo;
+end;
+
+// Closes the dataset
+procedure TsWorksheetDataset.InternalClose;
+begin
+  if FModified then begin
+    FWorkbook.WriteToFile(FFileName, true);
+    FModified := false;
+  end;
+  FreeAndNil(FWorkbook);
+  FWorksheet := nil;
+
+  if DefaultFields then
+    DestroyFields;
+  FDataSize := -1;
+  FRecordBufferSize := -1;
+  FRecNo := -1;
+end;
+
+// Moves the cursor to the first record, the first data row in the worksheet
+procedure TsWorksheetDataset.InternalFirst;
+begin
+  FRecNo := -1;
+end;
+
+// Internally, a bookmark is the row index of the worksheet.
+procedure TsWorksheetDataset.InternalGotoBookmark(ABookmark: Pointer);
+var
+  bm: PtrInt;
+begin
+  bm := PPtrInt(ABookmark)^;
+  if (bm >= GetFirstDataRowIndex) and (bm <= GetLastDataRowIndex) then
+    SetCurrentRow(bm)
+  else
+    DatabaseError('Bookmark ' + IntToStr(bm) + ' not found.');
+end;
+
+// Initializes the field defs.
+// Determines the offsets for each field in the buffers to be used when
+// accessing records.
+procedure TsWorksheetDataset.InternalInitFieldDefs;
+var
+  r, c: Integer;
+  cLast: cardinal;
+  cell: PCell;
+  fd: TFieldDef;
+  fn: String;
+  ft: TFieldType;
+  fs: Integer;
+  i: Integer;
+  isDate, isTime: Boolean;
+begin
+  FieldDefs.Clear;
+
+  // Iterate through all columns and collect field defs.
+  cLast := FWorksheet.GetLastOccupiedColIndex;
+  for c := 0 to cLast do
+  begin
+    cell := FWorksheet.FindCell(FFirstRow, c);
+    if cell = nil then
+      Continue;
+
+    // Store field name from cell in FFirstRow
+    fn := FWorksheet.ReadAsText(cell);
+
+    // Determine field type: Iterate over rows until first data value is found.
+    // The cell content type determines the field type. Iteration stops then.
+    for r := GetFirstDataRowIndex to GetLastDataRowIndex do
+    begin
+      cell := FWorksheet.FindCell(r, c);
+      if (cell = nil) then
+        continue;
+      case cell^.ContentType of
+        cctNumber: ft := ftInteger;  // float will be checked below
+        cctUTF8String: ft := ftString;
+        cctDateTime: ft := ftDateTime;
+        cctBool: ft := ftBoolean;
+        else continue;
+      end;
+      break;
+    end;
+
+    // Determine field size
+    case ft of
+      ftString:
+        begin
+          fs := 0;
+          for r := GetFirstDataRowIndex to GetLastDataRowIndex do
+            fs := Max(fs, Length(FWorksheet.ReadAsText(r, c)));
+//          inc(fs);  // for zero-termination
+        end;
+      ftInteger:    // Distinguish between integer and float
+        begin
+          for r := GetFirstDataRowIndex to GetLastDataRowIndex do
+          begin
+            cell := FWorksheet.FindCell(r, c);
+            if cell = nil then
+              continue;
+            if (cell^.ContentType = cctNumber) and (frac(cell^.NumberValue) <> 0) then
+            begin
+              ft := ftFloat;
+              break;
+            end;
+          end;
+          fs := 0;
+          if ft = ftFloat then
+            fs := SizeOf(Double)
+          else
+            fs := SizeOf(Integer);
+        end;
+      ftDateTime:
+        begin
+          fs := 0;
+          // Determine whether the date/time can be simplified to a pure date or pure time.
+          isDate := true;
+          isTime := true;
+          for r := GetFirstDataRowIndex to GetLastDataRowIndex do
+          begin
+            cell := FWorksheet.FindCell(r, c);
+            if cell = nil then
+              continue;
+            if frac(cell^.DateTimeValue) <> 0 then isDate := false;
+            if (cell^.DateTimeValue > 0) then isTime := false;
+            if (not isDate) and (not isTime) then break;
+          end;
+          if isDate then ft := ftDate;
+          if isTime then ft := ftTime;
+        end;
+      ftBoolean:
+        fs := SizeOf(Boolean);
+      else
+        ;
+    end;
+
+    // Add field def and set its properties
+    fd := FieldDefs.AddFieldDef;
+    fd.Name := FixFieldName(fn);
+    fd.DataType := ft;
+    fd.Size := fs;
+    TsFieldDef(fd).Column := c;
+  end;
+
+  // Determine the offsets at which the field data will begin in the buffer.
+  SetLength(FFieldOffsets, FieldDefs.Count);
+  FFieldOffsets[0] := 0;
+  for i := 1 to FieldDefs.Count-1 do
+  begin
+    case FieldDefs[i-1].DataType of
+      ftString: fs := FieldDefs[i-1].Size + 1;  // +1 for zero termination
+      ftInteger: fs := SizeOf(Integer);
+      ftFloat: fs := SizeOf(Double);
+      ftDateTime, ftDate, ftTime: fs := SizeOf(TDateTime);
+      else ;
+    end;
+    FFieldOffsets[i] := FFieldOffsets[i-1] + fs;
+  end;
+end;
+
+// Moves the cursor to the last record, the last data row of the worksheet
+procedure TsWorksheetDataset.InternalLast;
+begin
+  FRecNo := RecordCount;
+end;
+
+// Opens the dataset: Opens the workbook, initialized field defs, creates fields
+procedure TsWorksheetDataset.InternalOpen;
+begin
+  if (FFileName = '') then
+    DatabaseError('Filename not specified.');
+  if not FileExists(FFileName) then
+    DatabaseError('File not found.');
+  if (FSheetName = '') then
+    DatabaseError('Worksheet name not specified.');
+
+  FWorkbook := TsWorkbook.Create;
+  try
+    FWorkbook.ReadFromFile(FFileName);
+    FWorksheet := FWorkbook.GetWorksheetByName(FSheetName);
+    if FWorksheet = nil then
+      DatabaseError('Worksheet not found.');
+    FFirstRow := FWorksheet.GetFirstRowIndex(true);
+    FLastRow := FWorksheet.GetLastOccupiedRowIndex;
+    FRecordCount := -1;
+    FDataSize := -1;
+    FRecordBufferSize := -1;
+
+    InternalInitFieldDefs;
+    if DefaultFields then
+      CreateFields;
+    BindFields(True);  // Computes CalcFieldsSize
+    GetDataSize;
+    GetRecordSize;
+    FRecNo := -1;
+    FModified := false;
+
+  except
+    on E: Exception do
+    begin
+      FreeAndNil(FWorkbook);  // Needed to tell that the dataset is not active in this case
+      DatabaseError('Error opening workbook: ' + E.Message);
+    end;
+  end;
+end;
+
+procedure TsWorksheetDataset.InternalPost;
+begin
+  CheckActive;
+  if not (State in [dsEdit, dsInsert]) then
+    Exit;
+  inherited InternalPost;
+  if (State=dsEdit) then
+    WriteBufferToWorksheet(ActiveBuffer)
+  else
+    InternalAddRecord(ActiveBuffer, True);
+end;
+
+// Reinitializes a buffer which has been allocated previously -> zero out everything
+procedure TsWorksheetDataset.InternalInitRecord(Buffer: TRecordBuffer);
+begin
+  FillChar(Buffer^, FRecordBufferSize, 0);
+end;
+
+// Sets the database cursor to the record specified by the given buffer.
+// We extract here the bookmark associated with the buffer and go to this
+// bookmark.
+procedure TsWorksheetDataset.InternalSetToRecord(Buffer: TRecordBuffer);
+var
+  bm: TRowIndex;
+begin
+  bm := GetRecordInfoPtr(Buffer)^.Bookmark;
+  InternalGotoBookmark(@bm);
+end;
+
+function TsWorksheetDataset.IsCursorOpen: boolean;
+begin
+  Result := FWorksheet <> nil;
+end;
+
+// Reads the cells data of the current worksheet row
+// and copies them to the buffer.
+procedure TsWorksheetDataset.LoadRecordToBuffer(Buffer: TRecordBuffer; ARecNo: Integer);
+var
+  field: TField;
+  row: TRowIndex;
+  col: TColIndex;
+  cell: PCell;
+  i: Integer;
+  s: String;
+
+  P, Q: TRecordBuffer;
+begin
+  P := Buffer;
+  Q := Buffer;
+
+  row := GetRowIndexFromRecNo(ARecNo);
+  for field in Fields do
+  begin
+    col := ColIndexFromField(field);
+    cell := FWorksheet.FindCell(row, col);
+    if cell <> nil then
+      case cell^.ContentType of
+        cctUTF8String:
+          begin
+            s := FWorksheet.ReadAsText(cell) + #0;
+            Move(s[1], Buffer^, Length(s));
+          end;
+        cctNumber:
+          case field.DataType of
+            ftFloat:
+              Move(cell^.NumberValue, Buffer^, SizeOf(cell^.NumberValue));
+            ftInteger:
+              begin
+                i := Round(cell^.NumberValue);
+                Move(i, Buffer^, SizeOf(i));
+              end;
+            ftString:
+              begin
+                s := FWorksheet.ReadAsText(cell) + #0;
+                Move(s[1], Buffer^, Length(s));
+              end;
+            else
+              ;
+          end;
+        cctDateTime:
+          Move(cell^.DateTimeValue, Buffer^, SizeOf(TDateTime));
+        cctBool:
+          Move(cell^.BoolValue, Buffer^, SizeOf(Boolean));
+        else
+          ;
+      end;
+    inc(Buffer, field.DataSize);
+  end;
+                  (*
+  for field in Fields do
+  begin
+    P := P + FFieldOffsets[field.Index];
+    case field.Datatype of
+      ftString: WriteLn(field.Index, ': ', PChar(P));
+      ftInteger: WriteLn(field.Index, ': ', PInteger(P)^);
+      ftFloat: WriteLn(field.Index, ': ', PDouble(P)^);
+      ftDateTime: WriteLn(field.Index, ': ', PDateTime(P)^);
+      ftBoolean: WriteLn(field.Index, ': ', PBoolean(P)^);
+      else ;
+    end;
+  end;
+
+  for i := 0 to RecordSize-1 do
+  begin
+    Write(Format('%.2x ', [byte(Q^)]));
+    inc(Q);
+  end;
+  WriteLn;
+  *)
+
+end;
+
+function TsWorksheetDataset.Locate(const KeyFields: string;
+  const KeyValues: Variant; Options: TLocateOptions): boolean;
+var
+  ARecNo: integer;
+begin
+  // Call inherited to make sure the dataset is bi-directional
+  Result := inherited;
+  CheckActive;
+
+  Result := LocateRecord(KeyFields, KeyValues, Options, ARecNo);
+  if Result then begin
+    // TODO: generate scroll events if matched record is found
+    FRecNo := ARecNo;
+    Resync([]);
+  end;
+end;
+
+function TsWorksheetDataset.LocateRecord(
+  const KeyFields: string;
+  const KeyValues: Variant; Options: TLocateOptions;
+  out ARecNo: integer): Boolean;
+var
+  SaveState: TDataSetState;
+  lKeyFields: TList;
+  Matched: boolean;
+  AKeyValues: variant;
+  i: integer;
+  field: TField;
+  s1,s2: String;
+begin
+  Result := false;
+  SaveState := SetTempState(dsFilter);
+  FFilterBuffer := TempBuffer;
+  lKeyFields := TList.Create;
+  try
+    GetFieldList(lKeyFields, KeyFields);
+    if VarArrayDimCount(KeyValues) = 0 then
+    begin
+      Matched := lKeyFields.Count = 1;
+      AKeyValues := VarArrayOf([KeyValues]);
+    end else
+    if VarArrayDimCount(KeyValues) = 1 then
+    begin
+      Matched := VarArrayHighBound(KeyValues,1) + 1 = lKeyFields.Count;
+      AKeyValues := KeyValues;
+    end
+    else
+      Matched := false;
+
+    if Matched then
+    begin
+      ARecNo := 0;
+      while ARecNo < RecordCount do
+      begin
+        LoadRecordToBuffer(FFilterBuffer, ARecNo);
+        if Filtered then
+          Result := FilterRecord(FFilterBuffer)
+        else
+          Result := true;
+        // compare field by field
+        i := 0;
+        while Result and (i < lKeyFields.Count) do
+        begin
+          field := TField(lKeyFields[i]);
+          // string fields
+          if field.DataType in [ftString, ftFixedChar] then
+          begin
+            if TStringField(field).CodePage=CP_UTF8 then
+            begin
+              s1 := field.AsUTF8String;
+              s2 := UTF8Encode(VarToUnicodeStr(AKeyValues[i]));
+            end else
+            begin
+              s1 := field.AsString;
+              s2 := VarToStr(AKeyValues[i]);
+            end;
+            if loPartialKey in Options then
+              s1 := copy(s1, 1, length(s2));
+            if loCaseInsensitive in Options then
+              Result := AnsiCompareText(s1, s2)=0
+            else
+              Result := s1=s2;
+          end
+          // all other fields
+          else
+            Result := (field.Value=AKeyValues[i]);
+          inc(i);
+        end;
+        if Result then
+          break;
+        inc(ARecNo);
+      end;
+    end;
+  finally
+    lKeyFields.Free;
+    RestoreState(SaveState);
+  end;
+end;
+
+procedure TsWorksheetDataset.SetBookmarkData(Buffer: TRecordBuffer; Data: Pointer);
+begin
+  if Data <> nil then
+    GetRecordInfoPtr(Buffer)^.Bookmark := PPtrInt(Data)^
+  else
+    GetRecordInfoPtr(Buffer)^.Bookmark := 0;
+end;
+
+procedure TsWorksheetDataset.SetBookmarkFlag(Buffer: TRecordBuffer;
+  Value: TBookmarkFlag);
+begin
+  GetRecordInfoPtr(Buffer)^.BookmarkFlag := Value;
+end;
+
+procedure TsWorksheetDataset.SetCurrentRow(ARow: TRowIndex);
+begin
+  FRecNo := ARow - GetFirstDataRowIndex;
+end;
+
+procedure TsWorksheetDataset.SetFieldData(Field: TField; Buffer: Pointer);
+var
+  destBuffer: TRecordBuffer;
+  idx: Integer;
+  fsize: Integer;
+begin
+  if not GetActiveBuffer(destBuffer) then
+    exit;
+
+  idx := Field.FieldNo - 1;
+  if idx >= 0 then
+  begin
+    if State in [dsEdit, dsInsert, dsNewValue] then
+      Field.Validate(Buffer);
+    if Buffer = nil then
+//      SetFieldIsNull(Pointer(destBuffer), idx)
+    else
+    begin
+//      ClearFieldIsNull(Pointer(destBuffer), idx);
+      inc(destBuffer, FFieldOffsets[idx]);
+      fsize := Field.DataSize;
+      if Field.DataType = ftString then
+        dec(fSize);  // Do not move terminating 0 which is included in DataSize
+      Move(Buffer^, destBuffer^, fsize);
+    end;
+  end else
+  begin  // Calculated, Lookup
+    inc(destBuffer, RecordSize + Field.Offset);
+    Boolean(destBuffer[0]) := Buffer <> nil;
+    if Assigned(Buffer) then
+      Move(Buffer^, DestBuffer[1], Field.DataSize);
+  end;
+
+  if not (State in [dsCalcFields, dsFilter, dsNewValue]) then
+    DataEvent(deFieldChange, PtrInt(Field));
+end;
+
+{
+procedure TsWorksheetDataset.SetFieldData(Field: TField; Buffer: Pointer);
+var
+  P: PChar;
+begin
+  P := ActiveBuffer;
+  inc(P, FFieldOffsets[Field.Index]);
+  if Assigned(Buffer) then
+    Move(Buffer^, P^, SizeOf(Field.DataSize))
+  else
+    DatabaseError('Very bad error in SetFieldData');
+  DataEvent(deFieldChange, PtrInt(Field));
+end;
+}
+
+procedure TsWorksheetDataset.SetFilterText(AValue: string);
+begin
+  // Just do nothing; filter is not implemented
+end;
+
+procedure TsWorksheetDataset.SetRecNo(Value: Integer);
+begin
+  CheckBrowseMode;
+  if (Value >= 1) and (Value <= RecordCount) then
+  begin
+    FRecNo := Value-1;
+    Resync([]);
+  end;
+end;
+
+procedure TsWorksheetDataset.WriteBufferToWorksheet(Buffer: TRecordBuffer);
+var
+  row: TRowIndex;
+  col: TColIndex;
+  cell: PCell;
+  field: TField;
+  data: TBytes = nil;
+  P: Pointer;
+begin
+  row := GetCurrentRowIndex;
+  P := Buffer;
+  for field in Fields do begin
+    col := ColIndexFromField(field);
+    cell := FWorksheet.FindCell(row, col);
+    SetLength(data, field.DataSize);
+    if (Length(data) = 0) then
+    begin
+      if cell <> nil then
+        FWorksheet.DeleteCell(cell);
+    end else
+    begin
+      P := Buffer + FFieldOffsets[field.Index];
+      Move(P^, data[0], field.DataSize);
+      cell := FWorksheet.GetCell(row, col);
+      case field.DataType of
+        ftFloat:
+          FWorksheet.WriteNumber(cell, PDouble(@data[0])^);
+        ftInteger:
+          FWorksheet.WriteNumber(cell, PInteger(@data[0])^);
+        ftDateTime, ftDate, ftTime:
+          FWorksheet.WriteDateTime(cell, PDateTime(@data[0])^);
+        ftBoolean:
+          FWorksheet.WriteBoolValue(cell, PBoolean(@data[0])^);
+        ftString:
+          FWorksheet.WriteText(cell, StrPas(PChar(@data[0])));
+        else
+          ;
+      end;
+    end;
+  end;
+  FModified := true;
+end;
+
+
+end.
+

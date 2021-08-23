@@ -1,0 +1,80 @@
+object Form1: TForm1
+  Left = 285
+  Height = 424
+  Top = 130
+  Width = 526
+  Caption = 'Form1'
+  ClientHeight = 424
+  ClientWidth = 526
+  OnCreate = FormCreate
+  LCLVersion = '2.3.0.0'
+  object Memo1: TMemo
+    Left = 8
+    Height = 366
+    Top = 10
+    Width = 512
+    Font.Name = 'Courier New'
+    ParentFont = False
+    ScrollBars = ssVertical
+    TabOrder = 0
+  end
+  object btnCloseOpen: TButton
+    Left = 8
+    Height = 25
+    Top = 384
+    Width = 75
+    Caption = 'Close'
+    OnClick = btnCloseOpenClick
+    TabOrder = 1
+  end
+  object btnListValues: TButton
+    Left = 96
+    Height = 25
+    Top = 384
+    Width = 106
+    AutoSize = True
+    Caption = 'List field values'
+    OnClick = btnListValuesClick
+    TabOrder = 2
+  end
+  object btnFirst: TButton
+    Left = 216
+    Height = 25
+    Top = 384
+    Width = 48
+    AutoSize = True
+    Caption = 'First'
+    OnClick = btnFirstClick
+    TabOrder = 3
+  end
+  object btnPrior: TButton
+    Left = 272
+    Height = 25
+    Top = 384
+    Width = 51
+    AutoSize = True
+    Caption = 'Prior'
+    OnClick = btnPriorClick
+    TabOrder = 4
+  end
+  object btnNext: TButton
+    Left = 328
+    Height = 25
+    Top = 384
+    Width = 51
+    AutoSize = True
+    Caption = 'Next'
+    OnClick = btnNextClick
+    TabOrder = 5
+  end
+  object btnLast: TButton
+    Left = 384
+    Height = 25
+    Top = 384
+    Width = 47
+    AutoSize = True
+    Caption = 'Last'
+    OnClick = btnLastClick
+    TabOrder = 6
+  end
+end
