@@ -29,9 +29,9 @@
 
   * Filter: only by OnFilter event, not working currently.
   * Indexes: not implemented
+  * Sorting: not implemented
   * Insert: not yet implemented - there is a problem how to handle the bookmarks which are the row numbers so far.
   * Delete: not yet implemented - there is a problem how to handle the bookmarks which are the row numbers so far.
-  * CreateTable: to be done.
   * Scrolling issue: overwrites NULL fields with value from one of the buffer records.
 -------------------------------------------------------------------------------}
 
@@ -43,7 +43,7 @@ interface
 
 uses
   Classes, SysUtils, DB,
-  fpSpreadsheet, fpsTypes;
+  fpSpreadsheet, fpsTypes, fpsUtils;
 
 type
   TRowIndex = Int64;
@@ -88,6 +88,9 @@ type
     FFieldOffsets: array of Integer; // Offset to field start in buffer
     FModified: Boolean;              // Flag to show that workbook needs saving
     FFilterBuffer: TRecordBuffer;
+    FTableCreated: boolean;
+    FAutoFieldDefs: Boolean;
+    FIsOpen: boolean;
   private
     function FixFieldName(const AText: String): String;
     function GetActiveBuffer(out Buffer: TRecordBuffer): Boolean;
@@ -101,6 +104,7 @@ type
     // methods inherited from TDataset
     function AllocRecordBuffer: TRecordBuffer; override;
     procedure ClearCalcFields(Buffer: TRecordBuffer); override;
+    procedure DoBeforeOpen; override;
     class function FieldDefsClass : TFieldDefsClass; override;
     procedure FreeRecordBuffer(var Buffer: TRecordBuffer); override;
     procedure GetBookmarkData(Buffer: TRecordBuffer; Data: Pointer); override;
@@ -124,8 +128,11 @@ type
     procedure SetBookmarkFlag(Buffer: TRecordBuffer; Value: TBookmarkFlag); override;
     procedure SetRecNo(Value: Integer); override;
     // new methods
+    procedure CalcFieldOffsets;
     function ColIndexFromField(AField: TField): TColIndex;
+    procedure DetectFieldDefs;
     function FilterRecord(Buffer: TRecordBuffer): Boolean;
+    procedure FreeWorkbook;
     function GetDataSize: Integer;
     procedure LoadRecordToBuffer(Buffer: TRecordBuffer; ARecNo: Integer);
     function LocateRecord(const KeyFields: string; const KeyValues: Variant;
@@ -136,7 +143,10 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function BookmarkValid(ABookmark: TBookmark): Boolean; override;
+    procedure Clear;
+    procedure Clear(ClearDefs: Boolean);
     function CompareBookmarks(Bookmark1, Bookmark2: TBookmark): Longint; override;
+    procedure CreateTable;
     function GetFieldData(Field: TField; Buffer: Pointer): Boolean; override;
     function Locate(const KeyFields: String; const KeyValues: Variant;
       Options: TLocateOptions): boolean; override;
@@ -153,6 +163,7 @@ type
     property BufferCount;
 
   published
+    property AutoFieldDefs: Boolean read FAutoFieldDefs write FAutoFieldDefs default true;
     property FileName: TFileName read FFileName write FFileName;
     property SheetName: String read FSheetName write FSheetName;
 
@@ -228,6 +239,7 @@ end;
 constructor TsWorksheetDataset.Create(AOwner: TComponent);
 begin
   inherited;
+  FAutoFieldDefs := true;
   FRecordCount := -1;
   FDataSize := -1;
   FRecordBufferSize := -1;
@@ -263,6 +275,47 @@ begin
   Result := (bm >= GetFirstDataRowIndex) and (bm <= GetLastDataRowIndex);
 end;
 
+procedure TsWorksheetDataset.CalcFieldOffsets;
+var
+  i: Integer;
+  fs: Integer;  // field size
+begin
+  SetLength(FFieldOffsets, FieldDefs.Count);
+  FFieldOffsets[0] := 0;
+  for i := 1 to FieldDefs.Count-1 do
+  begin
+    case FieldDefs[i-1].DataType of
+      ftString: fs := FieldDefs[i-1].Size + 1;  // +1 for zero termination
+      ftInteger: fs := SizeOf(Integer);
+      ftFloat: fs := SizeOf(Double);
+      ftDateTime, ftDate, ftTime: fs := SizeOf(TDateTime);
+      else ;
+    end;
+    FFieldOffsets[i] := FFieldOffsets[i-1] + fs;
+  end;
+end;
+
+procedure TsWorksheetDataset.Clear;
+begin
+  Clear(true);
+end;
+
+procedure TsWorksheetDataset.Clear(ClearDefs: Boolean);
+begin
+  FRecNo := -1;
+  FRecordCount := -1;
+  FDataSize := -1;
+  FRecordBufferSize := -1;
+  if Active then
+    Resync([]);
+  if ClearDefs then
+  begin
+    Close;
+    FieldDefs.Clear;
+    FTableCreated := false;
+  end;
+end;
+
 procedure TsWorksheetDataset.ClearCalcFields(Buffer: TRecordBuffer);
 begin
   FillChar(Buffer[RecordSize], CalcFieldsSize, 0);
@@ -286,6 +339,164 @@ begin
   Result := r[Bookmark1=nil, Bookmark2=nil];
   if Result = 2 then
     Result := PPtrInt(Bookmark1)^ - PPtrInt(Bookmark2)^;
+end;
+
+// Creates a new table, i.e. a new empty worksheet based on the given FieldDefs
+// The field names are written to the first row of the worksheet
+procedure TsWorksheetDataset.CreateTable;
+var
+  i: Integer;
+  fd: TsFieldDef;
+  noWorkbook: Boolean;
+begin
+  CheckInactive;
+  Clear(false);    // false = do not clear FieldDefs
+
+  noWorkbook := (FWorkbook = nil);
+  if noWorkbook then
+  begin
+    FWorkbook := TsWorkbook.Create;
+    FWorkSheet := FWorkbook.AddWorksheet(FSheetName);
+  end;
+
+  for i := 0 to FieldDefs.Count-1 do
+  begin
+    fd := FieldDefs[i] as TsFieldDef;
+    FWorksheet.WriteText(0, fd.Column, fd.Name);
+  end;
+  FWorkbook.WriteToFile(FFileName, true);
+
+  if noWorkbook then
+  begin
+    FreeAndNil(FWorkbook);
+    FWorksheet := nil;
+  end;
+
+  FTableCreated := true;
+end;
+
+// Determines the offsets for each field in the buffers to be used when
+// accessing records.
+procedure TsWorksheetDataset.DetectFieldDefs;
+var
+  r, c: Integer;
+  cLast: cardinal;
+  cell: PCell;
+  fd: TFieldDef;
+  fn: String;
+  ft: TFieldType;
+  fs: Integer;
+  i: Integer;
+  isDate, isTime: Boolean;
+begin
+  FieldDefs.Clear;
+
+  // Iterate through all columns and collect field defs.
+  cLast := FWorksheet.GetLastOccupiedColIndex;
+  for c := 0 to cLast do
+  begin
+    cell := FWorksheet.FindCell(FFirstRow, c);
+    if cell = nil then
+      Continue;
+
+    // Store field name from cell in FFirstRow
+    fn := FWorksheet.ReadAsText(cell);
+
+    // Determine field type: Iterate over rows until first data value is found.
+    // The cell content type determines the field type. Iteration stops then.
+    for r := GetFirstDataRowIndex to GetLastDataRowIndex do
+    begin
+      cell := FWorksheet.FindCell(r, c);
+      if (cell = nil) then
+        continue;
+      case cell^.ContentType of
+        cctNumber: ft := ftInteger;  // float will be checked below
+        cctUTF8String: ft := ftString;
+        cctDateTime: ft := ftDateTime;
+        cctBool: ft := ftBoolean;
+        else continue;
+      end;
+      break;
+    end;
+
+    // Determine field size
+    case ft of
+      ftString:
+        begin
+          fs := 0;
+          for r := GetFirstDataRowIndex to GetLastDataRowIndex do
+            fs := Max(fs, Length(FWorksheet.ReadAsText(r, c)));
+//          inc(fs);  // for zero-termination
+        end;
+      ftInteger:    // Distinguish between integer and float
+        begin
+          for r := GetFirstDataRowIndex to GetLastDataRowIndex do
+          begin
+            cell := FWorksheet.FindCell(r, c);
+            if cell = nil then
+              continue;
+            if (cell^.ContentType = cctNumber) and (frac(cell^.NumberValue) <> 0) then
+            begin
+              ft := ftFloat;
+              break;
+            end;
+          end;
+          fs := 0;
+          if ft = ftFloat then
+            fs := SizeOf(Double)
+          else
+            fs := SizeOf(Integer);
+        end;
+      ftDateTime:
+        begin
+          fs := 0;
+          // Determine whether the date/time can be simplified to a pure date or pure time.
+          isDate := true;
+          isTime := true;
+          for r := GetFirstDataRowIndex to GetLastDataRowIndex do
+          begin
+            cell := FWorksheet.FindCell(r, c);
+            if cell = nil then
+              continue;
+            if frac(cell^.DateTimeValue) <> 0 then isDate := false;
+            if (cell^.DateTimeValue > 0) then isTime := false;
+            if (not isDate) and (not isTime) then break;
+          end;
+          if isDate then ft := ftDate;
+          if isTime then ft := ftTime;
+        end;
+      ftBoolean:
+        fs := SizeOf(Boolean);
+      else
+        ;
+    end;
+
+    // Add field def and set its properties
+    fd := FieldDefs.AddFieldDef;
+    fd.Name := FixFieldName(fn);
+    fd.DataType := ft;
+    fd.Size := fs;
+    TsFieldDef(fd).Column := c;
+  end;
+
+  // Determine the offsets at which the field data will begin in the buffer.
+  CalcFieldOffsets;
+end;
+
+procedure TsWorksheetDataset.DoBeforeOpen;
+begin
+  if (FFileName = '') then
+    DatabaseError('Filename not specified.');
+
+  if (FieldDefs.Count = 0) then begin
+    if not FileExists(FFileName) then
+      DatabaseError('File not found.');
+  end;
+
+  if (FSheetName = '') then
+    DatabaseError('Worksheet name not specified.');
+
+  inherited;
 end;
 
 // Returns the class to be used for FieldDefs. Is overridden to get access
@@ -326,6 +537,12 @@ end;
 procedure TsWorksheetDataset.FreeRecordBuffer(var Buffer: TRecordBuffer);
 begin
   FreeMem(Buffer);
+end;
+
+procedure TsWorksheetDataset.FreeWorkbook;
+begin
+  FreeAndNil(FWorkbook);
+  FWorksheet := nil;
 end;
 
 // Extracts the bookmark (worksheet row index) from the specified buffer.
@@ -555,12 +772,13 @@ end;
 // Closes the dataset
 procedure TsWorksheetDataset.InternalClose;
 begin
+  FIsOpen := false;
+
   if FModified then begin
     FWorkbook.WriteToFile(FFileName, true);
     FModified := false;
   end;
-  FreeAndNil(FWorkbook);
-  FWorksheet := nil;
+  FreeWorkbook;
 
   if DefaultFields then
     DestroyFields;
@@ -588,124 +806,11 @@ begin
 end;
 
 // Initializes the field defs.
-// Determines the offsets for each field in the buffers to be used when
-// accessing records.
 procedure TsWorksheetDataset.InternalInitFieldDefs;
-var
-  r, c: Integer;
-  cLast: cardinal;
-  cell: PCell;
-  fd: TFieldDef;
-  fn: String;
-  ft: TFieldType;
-  fs: Integer;
-  i: Integer;
-  isDate, isTime: Boolean;
 begin
-  FieldDefs.Clear;
-
-  // Iterate through all columns and collect field defs.
-  cLast := FWorksheet.GetLastOccupiedColIndex;
-  for c := 0 to cLast do
-  begin
-    cell := FWorksheet.FindCell(FFirstRow, c);
-    if cell = nil then
-      Continue;
-
-    // Store field name from cell in FFirstRow
-    fn := FWorksheet.ReadAsText(cell);
-
-    // Determine field type: Iterate over rows until first data value is found.
-    // The cell content type determines the field type. Iteration stops then.
-    for r := GetFirstDataRowIndex to GetLastDataRowIndex do
-    begin
-      cell := FWorksheet.FindCell(r, c);
-      if (cell = nil) then
-        continue;
-      case cell^.ContentType of
-        cctNumber: ft := ftInteger;  // float will be checked below
-        cctUTF8String: ft := ftString;
-        cctDateTime: ft := ftDateTime;
-        cctBool: ft := ftBoolean;
-        else continue;
-      end;
-      break;
-    end;
-
-    // Determine field size
-    case ft of
-      ftString:
-        begin
-          fs := 0;
-          for r := GetFirstDataRowIndex to GetLastDataRowIndex do
-            fs := Max(fs, Length(FWorksheet.ReadAsText(r, c)));
-//          inc(fs);  // for zero-termination
-        end;
-      ftInteger:    // Distinguish between integer and float
-        begin
-          for r := GetFirstDataRowIndex to GetLastDataRowIndex do
-          begin
-            cell := FWorksheet.FindCell(r, c);
-            if cell = nil then
-              continue;
-            if (cell^.ContentType = cctNumber) and (frac(cell^.NumberValue) <> 0) then
-            begin
-              ft := ftFloat;
-              break;
-            end;
-          end;
-          fs := 0;
-          if ft = ftFloat then
-            fs := SizeOf(Double)
-          else
-            fs := SizeOf(Integer);
-        end;
-      ftDateTime:
-        begin
-          fs := 0;
-          // Determine whether the date/time can be simplified to a pure date or pure time.
-          isDate := true;
-          isTime := true;
-          for r := GetFirstDataRowIndex to GetLastDataRowIndex do
-          begin
-            cell := FWorksheet.FindCell(r, c);
-            if cell = nil then
-              continue;
-            if frac(cell^.DateTimeValue) <> 0 then isDate := false;
-            if (cell^.DateTimeValue > 0) then isTime := false;
-            if (not isDate) and (not isTime) then break;
-          end;
-          if isDate then ft := ftDate;
-          if isTime then ft := ftTime;
-        end;
-      ftBoolean:
-        fs := SizeOf(Boolean);
-      else
-        ;
-    end;
-
-    // Add field def and set its properties
-    fd := FieldDefs.AddFieldDef;
-    fd.Name := FixFieldName(fn);
-    fd.DataType := ft;
-    fd.Size := fs;
-    TsFieldDef(fd).Column := c;
-  end;
-
-  // Determine the offsets at which the field data will begin in the buffer.
-  SetLength(FFieldOffsets, FieldDefs.Count);
-  FFieldOffsets[0] := 0;
-  for i := 1 to FieldDefs.Count-1 do
-  begin
-    case FieldDefs[i-1].DataType of
-      ftString: fs := FieldDefs[i-1].Size + 1;  // +1 for zero termination
-      ftInteger: fs := SizeOf(Integer);
-      ftFloat: fs := SizeOf(Double);
-      ftDateTime, ftDate, ftTime: fs := SizeOf(TDateTime);
-      else ;
-    end;
-    FFieldOffsets[i] := FFieldOffsets[i-1] + fs;
-  end;
+  if FAutoFieldDefs and (FieldDefs.Count = 0) then
+    DetectFieldDefs;
+  CalcFieldOffsets;
 end;
 
 // Moves the cursor to the last record, the last data row of the worksheet
@@ -717,19 +822,23 @@ end;
 // Opens the dataset: Opens the workbook, initialized field defs, creates fields
 procedure TsWorksheetDataset.InternalOpen;
 begin
-  if (FFileName = '') then
-    DatabaseError('Filename not specified.');
-  if not FileExists(FFileName) then
-    DatabaseError('File not found.');
-  if (FSheetName = '') then
-    DatabaseError('Worksheet name not specified.');
-
   FWorkbook := TsWorkbook.Create;
   try
-    FWorkbook.ReadFromFile(FFileName);
-    FWorksheet := FWorkbook.GetWorksheetByName(FSheetName);
-    if FWorksheet = nil then
-      DatabaseError('Worksheet not found.');
+    if not FWorkbook.ValidWorksheetName(FSheetName) then
+      DatabaseError('"' + FSheetName + '" is not a valid worksheet name.');
+
+    if not FileExists(FFileName) and (not FAutoFieldDefs) and (not FTableCreated) then
+    begin
+      FWorkSheet := FWorkbook.AddWorksheet(FSheetName);
+      CreateTable;
+    end else
+    begin
+      FWorkbook.ReadFromFile(FFileName);
+      FWorksheet := FWorkbook.GetWorksheetByName(FSheetName);
+      if FWorksheet = nil then
+        DatabaseError('Worksheet not found.');
+    end;
+
     FFirstRow := FWorksheet.GetFirstRowIndex(true);
     FLastRow := FWorksheet.GetLastOccupiedRowIndex;
     FRecordCount := -1;
@@ -745,10 +854,11 @@ begin
     FRecNo := -1;
     FModified := false;
 
+    FIsOpen := true;
   except
     on E: Exception do
     begin
-      FreeAndNil(FWorkbook);  // Needed to tell that the dataset is not active in this case
+      FreeWorkbook;
       DatabaseError('Error opening workbook: ' + E.Message);
     end;
   end;
@@ -785,7 +895,7 @@ end;
 
 function TsWorksheetDataset.IsCursorOpen: boolean;
 begin
-  Result := FWorksheet <> nil;
+  Result := FIsOpen;
 end;
 
 // Reads the cells data of the current worksheet row

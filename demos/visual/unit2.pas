@@ -67,11 +67,24 @@ begin
 end;
 
 procedure TForm1.FormCreate(Sender: TObject);
+var
+  i: Integer;
 begin
   FDataset := TsWorksheetDataset.Create(self);
   FDataset.Filename := DATA_FILE;
   FDataset.SheetName := 'Sheet';
   FDataset.AfterScroll := @AfterScrollHandler;
+
+  FDataset.AutoFieldDefs := true; //false;
+  FDataset.FieldDefs.Add('IntCol', ftInteger);
+  FDataset.FieldDefs.Add('StringCol3', ftString, 3);
+  FDataset.FieldDefs.Add('StringCol5', ftString, 5);
+  FDataset.FieldDefs.Add('FloatCol', ftFloat);
+  FDataset.FieldDefs.Add('DateCol', ftDate);
+  FDataset.FieldDefs.Add('BoolCol', ftBoolean);
+  for i := 0 to FDataset.FieldDefs.Count-1 do
+    TsFieldDef(FDataset.FieldDefs[i]).Column := i;
+
   FDataset.Open;
   DataSource1.Dataset := FDataset;
   DBEdit1.Datafield := 'IntCol';
