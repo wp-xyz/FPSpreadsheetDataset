@@ -2,10 +2,10 @@ object Form1: TForm1
   Left = 285
   Height = 389
   Top = 131
-  Width = 897
+  Width = 981
   Caption = 'Form1'
   ClientHeight = 389
-  ClientWidth = 897
+  ClientWidth = 981
   OnCreate = FormCreate
   LCLVersion = '2.3.0.0'
   object DBEdit1: TDBEdit
@@ -61,10 +61,10 @@ object Form1: TForm1
     Caption = 'Label1'
   end
   object DBGrid1: TDBGrid
-    Left = 312
+    Left = 400
     Height = 370
     Top = 8
-    Width = 572
+    Width = 568
     Anchors = [akTop, akLeft, akRight, akBottom]
     Color = clWindow
     Columns = <>
@@ -101,24 +101,29 @@ object Form1: TForm1
     ValueUnchecked = 'False'
   end
   object btnFind: TButton
-    Left = 38
+    AnchorSideLeft.Control = Button1
+    AnchorSideRight.Control = Button1
+    AnchorSideRight.Side = asrBottom
+    Left = 24
     Height = 25
     Top = 318
-    Width = 49
+    Width = 158
+    Anchors = [akTop, akLeft, akRight]
     AutoSize = True
     Caption = 'Find'
     OnClick = btnFindClick
     TabOrder = 8
   end
   object cmbFields: TComboBox
-    AnchorSideLeft.Control = btnFind
+    AnchorSideLeft.Control = Button1
     AnchorSideLeft.Side = asrBottom
     AnchorSideTop.Control = btnFind
     AnchorSideTop.Side = asrCenter
-    Left = 95
+    Left = 190
     Height = 23
-    Top = 319
+    Top = 332
     Width = 100
+    Anchors = [akLeft]
     BorderSpacing.Left = 8
     ItemHeight = 15
     Style = csDropDownList
@@ -127,11 +132,11 @@ object Form1: TForm1
   object Label2: TLabel
     AnchorSideLeft.Control = cmbFields
     AnchorSideLeft.Side = asrBottom
-    AnchorSideTop.Control = btnFind
+    AnchorSideTop.Control = cmbFields
     AnchorSideTop.Side = asrCenter
-    Left = 199
+    Left = 294
     Height = 15
-    Top = 323
+    Top = 336
     Width = 8
     BorderSpacing.Around = 4
     Caption = '='
@@ -139,13 +144,23 @@ object Form1: TForm1
   object edKeyValue: TEdit
     AnchorSideLeft.Control = Label2
     AnchorSideLeft.Side = asrBottom
-    AnchorSideTop.Control = btnFind
+    AnchorSideTop.Control = cmbFields
     AnchorSideTop.Side = asrCenter
-    Left = 211
+    Left = 306
     Height = 23
-    Top = 319
+    Top = 332
     Width = 80
     TabOrder = 10
+  end
+  object Button1: TButton
+    Left = 24
+    Height = 25
+    Top = 346
+    Width = 158
+    AutoSize = True
+    Caption = 'Lookup DateCol,FloatCol'
+    OnClick = Button1Click
+    TabOrder = 11
   end
   object DataSource1: TDataSource
     Left = 224

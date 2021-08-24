@@ -1,10 +1,39 @@
-{ Documentation used:
-  - https://www.delphipower.xyz/guide_8/building_custom_datasets.html
-  - http://etutorials.org/Programming/mastering+delphi+7/Part+III+Delphi+Database-Oriented+Architectures/Chapter+17+Writing+Database+Components/Building+Custom+Datasets/
-  - http://216.19.73.24/articles/customds.asp
-  - https://delphi.cjcsoft.net/viewthread.php?tid=44220
-}
+{@@ ----------------------------------------------------------------------------
+  Unit **fpsDataset** implements a TDataset based on spreadsheet data.
+  This way spreadsheets can be accessed in a database-like manner.
+  Of course, it is required that all cells in a column have the same type.
 
+  AUTHORS: Werner Pamler
+
+  LICENSE: See the file COPYING.modifiedLGPL.txt, included in the Lazarus
+           distribution, for details about the license.
+
+  Documentation used:
+  * https://www.delphipower.xyz/guide_8/building_custom_datasets.html
+  * http://etutorials.org/Programming/mastering+delphi+7/Part+III+Delphi+Database-Oriented+Architectures/Chapter+17+Writing+Database+Components/Building+Custom+Datasets/
+  * http://216.19.73.24/articles/customds.asp
+  * https://delphi.cjcsoft.net/viewthread.php?tid=44220
+
+  Much of the code is adapted from TMemDataset.
+
+  Current status (Aug 24, 2021):
+  * Field defs: determined automatically from file, external fielddefs are ignored
+    Required, Unique etc not supported ATM.
+  * Fields: working
+  * Field types: ftFloat, ftInteger, ftDateTime, ftDate, ftTime, ftString, ftBoolean
+  * Calculated fields: to be tested
+  * Persistent fields: to be done
+  * Locate: working
+  * Lookup: working
+  * Edit: working, Post and Cancel ok
+
+  * Filter: only by OnFilter event, not working currently.
+  * Indexes: not implemented
+  * Insert: not yet implemented - there is a problem how to handle the bookmarks which are the row numbers so far.
+  * Delete: not yet implemented - there is a problem how to handle the bookmarks which are the row numbers so far.
+  * CreateTable: to be done.
+  * Scrolling issue: overwrites NULL fields with value from one of the buffer records.
+-------------------------------------------------------------------------------}
 
 unit fpsDataset;
 
@@ -109,7 +138,10 @@ type
     function BookmarkValid(ABookmark: TBookmark): Boolean; override;
     function CompareBookmarks(Bookmark1, Bookmark2: TBookmark): Longint; override;
     function GetFieldData(Field: TField; Buffer: Pointer): Boolean; override;
-    function Locate(const KeyFields: string; const KeyValues: Variant; Options: TLocateOptions): boolean; override;
+    function Locate(const KeyFields: String; const KeyValues: Variant;
+      Options: TLocateOptions): boolean; override;
+    function Lookup(const Keyfields: String; const KeyValues: Variant;
+      const ResultFields: String): Variant; override;
     procedure SetFieldData(Field: TField; Buffer: Pointer); override;
     property Filter; unimplemented;  // Use OnFilter instead
     property Modified: boolean read FModified;
@@ -834,6 +866,10 @@ begin
 
 end;
 
+{ Searches the first record for which the fields specified by Keyfields
+  (semicolon-separated list) have the values defined in KeyValues.
+  Returns false, when no such record is found.
+  Code from TMemDataset. }
 function TsWorksheetDataset.Locate(const KeyFields: string;
   const KeyValues: Variant; Options: TLocateOptions): boolean;
 var
@@ -851,6 +887,9 @@ begin
   end;
 end;
 
+{ Helper function for locating records.
+  Taken from TMemDataset: This implements a simple search from record to record.
+  To do: introduce an index for faster searching. }
 function TsWorksheetDataset.LocateRecord(
   const KeyFields: string;
   const KeyValues: Variant; Options: TLocateOptions;
@@ -931,6 +970,32 @@ begin
     lKeyFields.Free;
     RestoreState(SaveState);
   end;
+end;
+
+{ Searches the first record for which the fields specified by KeyFields
+  (semicolon-separated list of field names) have the values defined in KeyValues.
+  Returns the field values of the ResultFields (a semicolon-separated list of field
+  names), or NULL if there is no match.
+  Code from TMemDataset. }
+function TsWorksheetDataset.Lookup(const KeyFields: string; const KeyValues: Variant;
+  const ResultFields: string): Variant;
+var
+  ARecNo: integer;
+  SaveState: TDataSetState;
+begin
+  if LocateRecord(KeyFields, KeyValues, [], ARecNo) then
+  begin
+    SaveState := SetTempState(dsCalcFields);
+    try
+      // FFilterBuffer contains found record
+      CalculateFields(FFilterBuffer); // CalcBuffer is set to FFilterBuffer
+      Result := FieldValues[ResultFields];
+    finally
+      RestoreState(SaveState);
+    end;
+  end
+  else
+    Result := Null;
 end;
 
 procedure TsWorksheetDataset.SetBookmarkData(Buffer: TRecordBuffer; Data: Pointer);

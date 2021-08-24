@@ -14,6 +14,7 @@ type
 
   TForm1 = class(TForm)
     btnFind: TButton;
+    Button1: TButton;
     CheckBox1: TCheckBox;
     cmbFields: TComboBox;
     DataSource1: TDataSource;
@@ -28,6 +29,7 @@ type
     Label1: TLabel;
     Label2: TLabel;
     procedure btnFindClick(Sender: TObject);
+    procedure Button1Click(Sender: TObject);
     procedure CheckBox1Change(Sender: TObject);
     procedure FormCreate(Sender: TObject);
   private
@@ -45,6 +47,9 @@ var
 implementation
 
 {$R *.lfm}
+
+uses
+  Variants;
 
 const
   DATA_FILE = '../TestData.xlsx';
@@ -95,6 +100,23 @@ begin
     ShowMessage('Found')
   else
     ShowMessage('Not found');
+end;
+
+procedure TForm1.Button1Click(Sender: TObject);
+var
+  v: Variant;
+  s: String;
+  d: Double;
+begin
+  v := FDataset.Lookup(cmbFields.Items[cmbFields.ItemIndex], edKeyValue.Text, 'DateCol;FloatCol');
+  if VarIsNull(v) then
+    ShowMessage('Not found')
+  else
+  begin
+    s := VarToStr(v[0]);
+    d := v[1];
+    ShowMessage('DateCol = ' + VarToStr(v[0]) + LineEnding + 'FloatCol = ' + FormatFloat('0.00', d));
+  end;
 end;
 
 end.
