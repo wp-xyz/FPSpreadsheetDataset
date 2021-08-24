@@ -94,11 +94,58 @@ object Form1: TForm1
     Height = 23
     Top = 147
     Width = 90
-    Caption = 'DBCheckBox1'
+    Caption = 'BoolCol'
     DataSource = DataSource1
     TabOrder = 7
     ValueChecked = 'True'
     ValueUnchecked = 'False'
+  end
+  object btnFind: TButton
+    Left = 38
+    Height = 25
+    Top = 318
+    Width = 49
+    AutoSize = True
+    Caption = 'Find'
+    OnClick = btnFindClick
+    TabOrder = 8
+  end
+  object cmbFields: TComboBox
+    AnchorSideLeft.Control = btnFind
+    AnchorSideLeft.Side = asrBottom
+    AnchorSideTop.Control = btnFind
+    AnchorSideTop.Side = asrCenter
+    Left = 95
+    Height = 23
+    Top = 319
+    Width = 100
+    BorderSpacing.Left = 8
+    ItemHeight = 15
+    Style = csDropDownList
+    TabOrder = 9
+  end
+  object Label2: TLabel
+    AnchorSideLeft.Control = cmbFields
+    AnchorSideLeft.Side = asrBottom
+    AnchorSideTop.Control = btnFind
+    AnchorSideTop.Side = asrCenter
+    Left = 199
+    Height = 15
+    Top = 323
+    Width = 8
+    BorderSpacing.Around = 4
+    Caption = '='
+  end
+  object edKeyValue: TEdit
+    AnchorSideLeft.Control = Label2
+    AnchorSideLeft.Side = asrBottom
+    AnchorSideTop.Control = btnFind
+    AnchorSideTop.Side = asrCenter
+    Left = 211
+    Height = 23
+    Top = 319
+    Width = 80
+    TabOrder = 10
   end
   object DataSource1: TDataSource
     Left = 224

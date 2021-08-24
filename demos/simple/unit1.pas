@@ -19,8 +19,13 @@ type
     btnPrior: TButton;
     btnNext: TButton;
     btnLast: TButton;
+    btnFind: TButton;
+    cmbFields: TComboBox;
+    edKeyValue: TEdit;
+    Label1: TLabel;
     Memo1: TMemo;
     procedure btnCloseOpenClick(Sender: TObject);
+    procedure btnFindClick(Sender: TObject);
     procedure btnListValuesClick(Sender: TObject);
     procedure btnFirstClick(Sender: TObject);
     procedure btnPriorClick(Sender: TObject);
@@ -145,6 +150,9 @@ begin
   WorksheetDataset.FileName := DATA_FILE;
   WorksheetDataset.SheetName := 'Sheet';
   WorksheetDataset.Open;
+
+  WorksheetDataset.GetFieldNames(cmbFields.Items);
+  cmbFields.ItemIndex := 0;
 end;
 
 procedure TForm1.btnCloseOpenClick(Sender: TObject);
@@ -159,6 +167,14 @@ begin
     WorksheetDataset.Open;
     btnCloseOpen.Caption := 'Close';
   end;
+end;
+
+procedure TForm1.btnFindClick(Sender: TObject);
+begin
+  if WorksheetDataset.Locate(cmbFields.Items[cmbFields.ItemIndex], edKeyValue.Text, []) then
+    ShowMessage(edKeyValue.Text + ' found.')
+  else
+    ShowMessage('Not found.');
 end;
 
 procedure TForm1.btnListValuesClick(Sender: TObject);

@@ -13,7 +13,9 @@ type
   { TForm1 }
 
   TForm1 = class(TForm)
+    btnFind: TButton;
     CheckBox1: TCheckBox;
+    cmbFields: TComboBox;
     DataSource1: TDataSource;
     DBCheckBox1: TDBCheckBox;
     DBEdit1: TDBEdit;
@@ -22,7 +24,10 @@ type
     DBEdit4: TDBEdit;
     DBGrid1: TDBGrid;
     DBNavigator1: TDBNavigator;
+    edKeyValue: TEdit;
     Label1: TLabel;
+    Label2: TLabel;
+    procedure btnFindClick(Sender: TObject);
     procedure CheckBox1Change(Sender: TObject);
     procedure FormCreate(Sender: TObject);
   private
@@ -70,6 +75,9 @@ begin
   DBEdit4.DataField := 'DateCol';
   DBCheckbox1.DataField := 'BoolCol';
   (FDataset.FieldByName('FloatCol') as TFloatField).DisplayFormat := '0.000';
+
+  FDataset.GetFieldNames(cmbFields.Items);
+  cmbFields.ItemIndex := 0;
 end;
 
 procedure TForm1.CheckBox1Change(Sender: TObject);
@@ -79,6 +87,14 @@ begin
   else
     FDataset.OnFilterRecord := nil;
   FDataset.Filtered := Checkbox1.Checked;
+end;
+
+procedure TForm1.btnFindClick(Sender: TObject);
+begin
+  if FDataset.Locate(cmbFields.Items[cmbFields.ItemIndex], edKeyValue.Text, []) then
+    ShowMessage('Found')
+  else
+    ShowMessage('Not found');
 end;
 
 end.
