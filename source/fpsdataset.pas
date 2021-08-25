@@ -387,7 +387,6 @@ var
   fn: String;
   ft: TFieldType;
   fs: Integer;
-  i: Integer;
   isDate, isTime: Boolean;
 begin
   FieldDefs.Clear;
@@ -588,8 +587,8 @@ begin
   Result := FDataSize;
 end;
 
-// Extracts the value of a specific field from the active buffer and copies
-// it to the raw field data memory to which Buffer points.
+// Extracts the data value of a specific field from the active buffer and copies
+// it to the memory to which Buffer points.
 // Adapted from TMemDataset
 function TsWorksheetDataset.GetFieldData(Field: TField; Buffer: Pointer): Boolean;
 var
@@ -607,7 +606,7 @@ begin
   begin
 //    Result := not GetFieldIsNull(pointer(srcBuffer), idx);
 //    if Result and Assigned(Buffer) then
-    if {not Field.IsNull and} Assigned(Buffer) then
+    if Assigned(Buffer) then
     begin
       inc(srcBuffer, FFieldOffsets[idx]);
       if (Field.DataType in [ftDate, ftTime, ftDateTime]) then
@@ -618,7 +617,8 @@ begin
       end else begin
         Move(srcBuffer^, Buffer^, Field.DataSize);
       end;
-    end;
+    end else
+      Result := false;
   end else
   begin  // Calculated, Lookup
     inc(srcBuffer, RecordSize + Field.Offset);
@@ -1120,6 +1120,9 @@ begin
   FRecNo := ARow - GetFirstDataRowIndex;
 end;
 
+// Copies the data to which Buffer points to the position in the active buffer
+// which belongs to the specified field.
+// Adapted from TMemDataset
 procedure TsWorksheetDataset.SetFieldData(Field: TField; Buffer: Pointer);
 var
   destBuffer: TRecordBuffer;
