@@ -289,6 +289,7 @@ begin
       ftInteger: fs := SizeOf(Integer);
       ftFloat: fs := SizeOf(Double);
       ftDateTime, ftDate, ftTime: fs := SizeOf(TDateTime);
+      ftBoolean: fs := SizeOf(WordBool);
       else ;
     end;
     FFieldOffsets[i] := FFieldOffsets[i-1] + fs;
@@ -420,36 +421,25 @@ begin
     end;
 
     // Determine field size
+    fs := 0;
     case ft of
       ftString:
-        begin
-          fs := 0;
-          for r := GetFirstDataRowIndex to GetLastDataRowIndex do
-            fs := Max(fs, Length(FWorksheet.ReadAsText(r, c)));
-//          inc(fs);  // for zero-termination
-        end;
+        for r := GetFirstDataRowIndex to GetLastDataRowIndex do
+          fs := Max(fs, Length(FWorksheet.ReadAsText(r, c)));
       ftInteger:    // Distinguish between integer and float
+        for r := GetFirstDataRowIndex to GetLastDataRowIndex do
         begin
-          for r := GetFirstDataRowIndex to GetLastDataRowIndex do
+          cell := FWorksheet.FindCell(r, c);
+          if cell = nil then
+            continue;
+          if (cell^.ContentType = cctNumber) and (frac(cell^.NumberValue) <> 0) then
           begin
-            cell := FWorksheet.FindCell(r, c);
-            if cell = nil then
-              continue;
-            if (cell^.ContentType = cctNumber) and (frac(cell^.NumberValue) <> 0) then
-            begin
-              ft := ftFloat;
-              break;
-            end;
+            ft := ftFloat;
+            break;
           end;
-          fs := 0;
-          if ft = ftFloat then
-            fs := SizeOf(Double)
-          else
-            fs := SizeOf(Integer);
         end;
       ftDateTime:
         begin
-          fs := 0;
           // Determine whether the date/time can be simplified to a pure date or pure time.
           isDate := true;
           isTime := true;
@@ -465,8 +455,6 @@ begin
           if isDate then ft := ftDate;
           if isTime then ft := ftTime;
         end;
-      ftBoolean:
-        fs := SizeOf(Boolean);
       else
         ;
     end;
@@ -608,7 +596,7 @@ var
   srcBuffer: TRecordBuffer;
   idx: Integer;
   dt: TDateTime;
-  dtr: TDateTimeRec;
+  {%H-}dtr: TDateTimeRec;
 begin
   Result := GetActiveBuffer(srcBuffer);
   if not Result then
@@ -619,7 +607,7 @@ begin
   begin
 //    Result := not GetFieldIsNull(pointer(srcBuffer), idx);
 //    if Result and Assigned(Buffer) then
-    if not IsEmpty and Assigned(Buffer) then
+    if {not Field.IsNull and} Assigned(Buffer) then
     begin
       inc(srcBuffer, FFieldOffsets[idx]);
       if (Field.DataType in [ftDate, ftTime, ftDateTime]) then
@@ -627,8 +615,9 @@ begin
         Move(srcBuffer^, dt, Field.DataSize);
         dtr := DateTimeToNative(Field.DataType, dt);
         Move(dtr, Buffer^, SizeOf(TDateTimeRec));
-      end else
+      end else begin
         Move(srcBuffer^, Buffer^, Field.DataSize);
+      end;
     end;
   end else
   begin  // Calculated, Lookup
@@ -908,11 +897,12 @@ var
   cell: PCell;
   i: Integer;
   s: String;
+  b: WordBool;
 
-  P, Q: TRecordBuffer;
+  //P, Q: TRecordBuffer;
 begin
-  P := Buffer;
-  Q := Buffer;
+  //P := Buffer;
+  //Q := Buffer;
 
   row := GetRowIndexFromRecNo(ARecNo);
   for field in Fields do
@@ -946,13 +936,16 @@ begin
         cctDateTime:
           Move(cell^.DateTimeValue, Buffer^, SizeOf(TDateTime));
         cctBool:
-          Move(cell^.BoolValue, Buffer^, SizeOf(Boolean));
+          begin
+            b := cell^.BoolValue;    // Boolean field stores value as wordbool
+            Move(b, Buffer^, SizeOf(b));
+          end;
         else
           ;
       end;
     inc(Buffer, field.DataSize);
   end;
-                  (*
+                       (*
   for field in Fields do
   begin
     P := P + FFieldOffsets[field.Index];
@@ -961,7 +954,7 @@ begin
       ftInteger: WriteLn(field.Index, ': ', PInteger(P)^);
       ftFloat: WriteLn(field.Index, ': ', PDouble(P)^);
       ftDateTime: WriteLn(field.Index, ': ', PDateTime(P)^);
-      ftBoolean: WriteLn(field.Index, ': ', PBoolean(P)^);
+      ftBoolean: WriteLn(field.Index, ': ', PWordBool(P)^);
       else ;
     end;
   end;
