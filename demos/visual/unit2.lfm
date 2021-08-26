@@ -1,10 +1,10 @@
 object Form1: TForm1
   Left = 285
-  Height = 389
+  Height = 444
   Top = 131
   Width = 981
   Caption = 'Form1'
-  ClientHeight = 389
+  ClientHeight = 444
   ClientWidth = 981
   OnCreate = FormCreate
   LCLVersion = '2.3.0.0'
@@ -62,7 +62,7 @@ object Form1: TForm1
   end
   object DBGrid1: TDBGrid
     Left = 400
-    Height = 370
+    Height = 425
     Top = 8
     Width = 568
     Anchors = [akTop, akLeft, akRight, akBottom]
@@ -101,8 +101,8 @@ object Form1: TForm1
     ValueUnchecked = 'False'
   end
   object btnFind: TButton
-    AnchorSideLeft.Control = Button1
-    AnchorSideRight.Control = Button1
+    AnchorSideLeft.Control = btnLookup
+    AnchorSideRight.Control = btnLookup
     AnchorSideRight.Side = asrBottom
     Left = 24
     Height = 25
@@ -115,15 +115,14 @@ object Form1: TForm1
     TabOrder = 8
   end
   object cmbFields: TComboBox
-    AnchorSideLeft.Control = Button1
+    AnchorSideLeft.Control = btnLookup
     AnchorSideLeft.Side = asrBottom
-    AnchorSideTop.Control = btnFind
+    AnchorSideTop.Control = Bevel1
     AnchorSideTop.Side = asrCenter
     Left = 190
     Height = 23
-    Top = 332
+    Top = 333
     Width = 100
-    Anchors = [akLeft]
     BorderSpacing.Left = 8
     ItemHeight = 15
     Style = csDropDownList
@@ -136,7 +135,7 @@ object Form1: TForm1
     AnchorSideTop.Side = asrCenter
     Left = 294
     Height = 15
-    Top = 336
+    Top = 337
     Width = 8
     BorderSpacing.Around = 4
     Caption = '='
@@ -148,18 +147,18 @@ object Form1: TForm1
     AnchorSideTop.Side = asrCenter
     Left = 306
     Height = 23
-    Top = 332
+    Top = 333
     Width = 80
     TabOrder = 10
   end
-  object Button1: TButton
+  object btnLookup: TButton
     Left = 24
     Height = 25
     Top = 346
     Width = 158
     AutoSize = True
     Caption = 'Lookup DateCol,FloatCol'
-    OnClick = Button1Click
+    OnClick = btnLookupClick
     TabOrder = 11
   end
   object Button2: TButton
@@ -170,6 +169,36 @@ object Form1: TForm1
     Caption = 'Button2'
     OnClick = Button2Click
     TabOrder = 12
+  end
+  object Bevel1: TBevel
+    AnchorSideTop.Control = btnFind
+    AnchorSideBottom.Control = btnLookup
+    AnchorSideBottom.Side = asrBottom
+    Left = 183
+    Height = 53
+    Top = 318
+    Width = 6
+    Anchors = [akTop, akLeft, akBottom]
+  end
+  object btnSetBookmark: TButton
+    Left = 36
+    Height = 25
+    Top = 393
+    Width = 99
+    AutoSize = True
+    Caption = 'Set bookmark'
+    OnClick = btnSetBookmarkClick
+    TabOrder = 13
+  end
+  object btnGoToBookmark: TButton
+    Left = 145
+    Height = 25
+    Top = 393
+    Width = 112
+    AutoSize = True
+    Caption = 'Go to Bookmark'
+    OnClick = btnGoToBookmarkClick
+    TabOrder = 14
   end
   object DataSource1: TDataSource
     Left = 224

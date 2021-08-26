@@ -67,7 +67,7 @@ type
 
   { TsRecordInfo }
   TsRecordInfo = record
-    Bookmark: TRowIndex;
+    Bookmark: LongInt;
     BookmarkFlag: TBookmarkFlag;
   end;
   PsRecordInfo = ^TsRecordInfo;
@@ -219,7 +219,7 @@ begin
   FDataSize := -1;
   FRecordBufferSize := -1;
   FRecNo := -1;
-  BookmarkSize := SizeOf(TRowIndex);
+  BookmarkSize := SizeOf(Longint);
 end;
 
 destructor TsWorksheetDataset.Destroy;
@@ -250,12 +250,12 @@ end;
   associated with the bookmark is between first and last data rows. }
 function TsWorksheetDataset.BookmarkValid(ABookmark: TBookmark): Boolean;
 var
-  bm: TRowIndex;
+  reqBookmark: Integer;
 begin
   Result := False;
   if ABookMark=nil then exit;
-  bm := PPtrInt(ABookmark)^;
-  Result := (bm >= GetFirstDataRowIndex) and (bm <= GetLastDataRowIndex);
+  reqBookmark := PInteger(ABookmark)^;
+  Result := (reqBookmark >= 0) and (reqBookmark <= GetRecordCount);
 end;
 
 procedure TsWorksheetDataset.CalcFieldOffsets;
@@ -336,7 +336,7 @@ const
 begin
   Result := r[Bookmark1=nil, Bookmark2=nil];
   if Result = 2 then
-    Result := PPtrInt(Bookmark1)^ - PPtrInt(Bookmark2)^;
+    Result := PInteger(Bookmark1)^ - PInteger(Bookmark2)^;
 end;
 
 { Creates a new table, i.e. a new empty worksheet based on the given FieldDefs
@@ -534,13 +534,6 @@ begin
   FWorksheet := nil;
 end;
 
-// Extracts the bookmark (worksheet row index) from the specified buffer.
-procedure TsWorksheetDataset.GetBookmarkData(Buffer: TRecordBuffer; Data: Pointer);
-begin
-  if Data <> nil then
-    PPtrInt(Data)^ := GetRecordInfoPtr(Buffer)^.Bookmark;
-end;
-
 // Returns the active buffer, depending on dataset's state.
 // Borrowed from TMemDataset.
 function TsWorksheetDataset.GetActiveBuffer(out Buffer: TRecordBuffer): Boolean;
@@ -560,6 +553,13 @@ begin
         Buffer := ActiveBuffer;
   end;
   Result := (Buffer <> nil);
+end;
+
+// Extracts the bookmark (worksheet row index) from the specified buffer.
+procedure TsWorksheetDataset.GetBookmarkData(Buffer: TRecordBuffer; Data: Pointer);
+begin
+  if Data <> nil then
+    PInteger(Data)^ := GetRecordInfoPtr(Buffer)^.Bookmark;
 end;
 
 // Extracts the bookmark flag from the specified buffer.
@@ -749,7 +749,7 @@ begin
       LoadRecordToBuffer(Buffer, FRecNo);
       with GetRecordInfoPtr(Buffer)^ do
       begin
-        Bookmark := GetCurrentRowIndex;
+        Bookmark := FRecNo;
         BookmarkFlag := bfCurrent;
       end;
       GetCalcFields(Buffer);
@@ -823,13 +823,13 @@ end;
 // Internally, a bookmark is the row index of the worksheet.
 procedure TsWorksheetDataset.InternalGotoBookmark(ABookmark: Pointer);
 var
-  bm: PtrInt;
+  reqBookmark: Integer;
 begin
-  bm := PPtrInt(ABookmark)^;
-  if (bm >= GetFirstDataRowIndex) and (bm <= GetLastDataRowIndex) then
-    SetCurrentRow(bm)
+  reqBookmark := PInteger(ABookmark)^;
+  if (reqBookmark >= 0) and (reqBookmark <= GetRecordCount) then
+    FRecNo := reqBookmark
   else
-    DatabaseError('Bookmark ' + IntToStr(bm) + ' not found.');
+    DatabaseError('Bookmark not found.');
 end;
 
 // Initializes the field defs.
@@ -914,10 +914,10 @@ end;
 // bookmark.
 procedure TsWorksheetDataset.InternalSetToRecord(Buffer: TRecordBuffer);
 var
-  bm: TRowIndex;
+  reqBookmark: Integer;
 begin
-  bm := GetRecordInfoPtr(Buffer)^.Bookmark;
-  InternalGotoBookmark(@bm);
+  reqBookmark := GetRecordInfoPtr(Buffer)^.Bookmark;
+  InternalGotoBookmark(@reqBookmark);
 end;
 
 function TsWorksheetDataset.IsCursorOpen: boolean;
@@ -1152,7 +1152,7 @@ end;
 procedure TsWorksheetDataset.SetBookmarkData(Buffer: TRecordBuffer; Data: Pointer);
 begin
   if Data <> nil then
-    GetRecordInfoPtr(Buffer)^.Bookmark := PPtrInt(Data)^
+    GetRecordInfoPtr(Buffer)^.Bookmark := PInteger(Data)^
   else
     GetRecordInfoPtr(Buffer)^.Bookmark := 0;
 end;

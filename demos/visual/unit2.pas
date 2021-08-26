@@ -6,15 +6,18 @@ interface
 
 uses
   Classes, SysUtils, DB, Forms, Controls, Graphics, Dialogs, DBCtrls, StdCtrls,
-  DBGrids, fpsDataset, xlsxOOXML;
+  DBGrids, ExtCtrls, fpsDataset, xlsxOOXML;
 
 type
 
   { TForm1 }
 
   TForm1 = class(TForm)
+    Bevel1: TBevel;
     btnFind: TButton;
-    Button1: TButton;
+    btnLookup: TButton;
+    btnSetBookmark: TButton;
+    btnGoToBookmark: TButton;
     Button2: TButton;
     CheckBox1: TCheckBox;
     cmbFields: TComboBox;
@@ -30,12 +33,15 @@ type
     Label1: TLabel;
     Label2: TLabel;
     procedure btnFindClick(Sender: TObject);
-    procedure Button1Click(Sender: TObject);
+    procedure btnGoToBookmarkClick(Sender: TObject);
+    procedure btnLookupClick(Sender: TObject);
+    procedure btnSetBookmarkClick(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure CheckBox1Change(Sender: TObject);
     procedure FormCreate(Sender: TObject);
   private
     FDataset: TsWorksheetDataset;
+    FBookmark: TBookmark;
     procedure AfterScrollHandler(Dataset: TDataset);
     procedure FilterRecord(Dataset: TDataset; var Accept: Boolean);
 
@@ -86,7 +92,6 @@ begin
   FDataset.FieldDefs.Add('BoolCol', ftBoolean);
   for i := 0 to FDataset.FieldDefs.Count-1 do
     TsFieldDef(FDataset.FieldDefs[i]).Column := i;
-
   FDataset.Open;
 
   DataSource1.Dataset := FDataset;
@@ -96,7 +101,6 @@ begin
   DBEdit4.DataField := 'DateCol';
   DBCheckbox1.DataField := 'BoolCol';
   (FDataset.FieldByName('FloatCol') as TFloatField).DisplayFormat := '0.000';
-
   FDataset.GetFieldNames(cmbFields.Items);
   cmbFields.ItemIndex := 0;
 end;
@@ -118,7 +122,12 @@ begin
     ShowMessage('Not found');
 end;
 
-procedure TForm1.Button1Click(Sender: TObject);
+procedure TForm1.btnGoToBookmarkClick(Sender: TObject);
+begin
+  FDataset.GotoBookmark(FBookmark);
+end;
+
+procedure TForm1.btnLookupClick(Sender: TObject);
 var
   v: Variant;
   s: String;
@@ -133,6 +142,11 @@ begin
     d := v[1];
     ShowMessage('DateCol = ' + VarToStr(v[0]) + LineEnding + 'FloatCol = ' + FormatFloat('0.00', d));
   end;
+end;
+
+procedure TForm1.btnSetBookmarkClick(Sender: TObject);
+begin
+  FBookmark := FDataset.GetBookmark;
 end;
 
 procedure TForm1.Button2Click(Sender: TObject);
