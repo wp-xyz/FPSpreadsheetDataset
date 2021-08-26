@@ -97,9 +97,15 @@ type
     function GetCurrentRowIndex: TRowIndex;
     function GetFirstDataRowIndex: TRowIndex;
     function GetLastDataRowIndex: TRowIndex;
+    function GetNullMaskPtr(Buffer: TRecordBuffer): Pointer;
+    function GetNullMaskSize: Integer;
     function GetRecordInfoPtr(Buffer: TRecordBuffer): PsRecordInfo;
     function GetRowIndexFromRecNo(ARecNo: Integer): TRowIndex;
     procedure SetCurrentRow(ARow: TRowIndex);
+    // Null mask
+    procedure ClearFieldIsNull(Buffer: TRecordBuffer; Field: TField);
+    function GetFieldIsNull(Buffer: TRecordBuffer; Field: TField): Boolean;
+    procedure SetFieldIsNull(Buffer: TRecordBuffer; Field: TField);
   protected
     // methods inherited from TDataset
     function AllocRecordBuffer: TRecordBuffer; override;
@@ -137,7 +143,7 @@ type
     procedure LoadRecordToBuffer(Buffer: TRecordBuffer; ARecNo: Integer);
     function LocateRecord(const KeyFields: string; const KeyValues: Variant;
       Options: TLocateOptions; out ARecNo: integer): Boolean;
-    procedure SetFilterText({%H-}AValue: String);
+    procedure SetFilterText(const {%H-}AValue: String); override;
     procedure WriteBufferToWorksheet(Buffer: TRecordBuffer);
   public
     constructor Create(AOwner: TComponent); override;
@@ -188,37 +194,6 @@ implementation
 uses
   Math, Variants;
 
-procedure ClearFieldIsNull(NullMask: PByte; const x: integer);
-begin
-  inc(NullMask,(x shr 3));
-  NullMask^ := NullMask^ or (1 shl (x and 7));
-end;
-
-procedure SetFieldIsNull(NullMask: PByte; const x: integer);
-begin
-  inc(NullMask,(x shr 3));
-  NullMask^ := NullMask^ and not (1 shl (x and 7));
-end;
-
-function GetFieldIsNull(NullMask: PByte; const x: integer): boolean;
-begin
-  inc(NullMask,(x shr 3));
-  Result := Nullmask^ and (1 shl (x and 7)) = 0;
-end;
-
-// TDataset does not expect date/time values in fields as TDateTime but as TDateTimeRec
-function DateTimeToNative(DataType: TFieldType; Data: TDateTime): TDateTimeRec;
-var
-  TimeStamp: TTimeStamp;
-begin
-  TimeStamp := DateTimeToTimeStamp(Data);
-  case DataType of
-    ftDate: Result.Date := TimeStamp.Date;
-    ftTime: Result.Time := TimeStamp.Time;
-    else    Result.DateTime := TimeStampToMSecs(TimeStamp);
-  end;
-end;
-
 { TsFieldDef }
 
 constructor TsFieldDef.Create(ACollection: TCollection);
@@ -253,7 +228,15 @@ begin
   inherited;
 end;
 
-// Allocates a buffer for the dataset
+{ Allocates a buffer for the dataset
+
+  Structure of the TsWorksheetDataset buffer
+  +---------------------------------------------------+-----------------------+
+  |        field data       | null mask | record info |   calculated fields   |
+  +---------------------------------------------------+-----------------------+
+
+  <-------------------- GetRecordSize ----------------> <-- CalcFieldsSize --->
+}
 function TsWorksheetDataset.AllocRecordBuffer: TRecordBuffer;
 var
   n: Integer;
@@ -263,8 +246,8 @@ begin
   FillChar(Result^, n, 0);
 end;
 
-// Returns whether the specified bookmark is valid, i.e. the worksheet row index
-// associated with the bookmark is between first and last data rows.
+{ Returns whether the specified bookmark is valid, i.e. the worksheet row index
+  associated with the bookmark is between first and last data rows. }
 function TsWorksheetDataset.BookmarkValid(ABookmark: TBookmark): Boolean;
 var
   bm: TRowIndex;
@@ -288,8 +271,8 @@ begin
       ftString: fs := FieldDefs[i-1].Size + 1;  // +1 for zero termination
       ftInteger: fs := SizeOf(Integer);
       ftFloat: fs := SizeOf(Double);
-      ftDateTime, ftDate, ftTime: fs := SizeOf(TDateTime);
-      ftBoolean: fs := SizeOf(WordBool);
+      ftDateTime, ftDate, ftTime: fs := SizeOf(TDateTime);  // date/time values are TDateTime in the buffer
+      ftBoolean: fs := SizeOf(WordBool);  // boolean is expected by TBooleanField to be WordBool
       else ;
     end;
     FFieldOffsets[i] := FFieldOffsets[i-1] + fs;
@@ -322,7 +305,21 @@ begin
   FillChar(Buffer[RecordSize], CalcFieldsSize, 0);
 end;
 
-// Determines the worksheet column index for a specific field
+{ Clears the information that the field is null by clearing the corresponding
+  bit in the null mask. }
+procedure TsWorksheetDataset.ClearFieldIsNull(Buffer: TRecordBuffer; Field: TField);
+var
+  nullMask: PByte;
+  n: Integer = 0;
+  m: Integer = 0;
+begin
+  nullMask := GetNullMaskPtr(Buffer);
+  DivMod(Field.FieldNo - 1, 8, n, m);
+  inc(nullMask, n);
+  nullMask^ := nullMask^ and not (1 shl m);
+end;
+
+{ Determines the worksheet column index for a specific field }
 function TsWorksheetDataset.ColIndexFromField(AField: TField): TColIndex;
 var
   fieldDef: TsFieldDef;
@@ -342,8 +339,8 @@ begin
     Result := PPtrInt(Bookmark1)^ - PPtrInt(Bookmark2)^;
 end;
 
-// Creates a new table, i.e. a new empty worksheet based on the given FieldDefs
-// The field names are written to the first row of the worksheet
+{ Creates a new table, i.e. a new empty worksheet based on the given FieldDefs
+  The field names are written to the first row of the worksheet. }
 procedure TsWorksheetDataset.CreateTable;
 var
   i: Integer;
@@ -410,9 +407,9 @@ begin
       if (cell = nil) then
         continue;
       case cell^.ContentType of
-        cctNumber: ft := ftInteger;  // float will be checked below
+        cctNumber: ft := ftInteger;    // float will be checked below
         cctUTF8String: ft := ftString;
-        cctDateTime: ft := ftDateTime;
+        cctDateTime: ft := ftDateTime; // ftDate, ftTime will be checked below
         cctBool: ft := ftBoolean;
         else continue;
       end;
@@ -423,8 +420,13 @@ begin
     fs := 0;
     case ft of
       ftString:
-        for r := GetFirstDataRowIndex to GetLastDataRowIndex do
-          fs := Max(fs, Length(FWorksheet.ReadAsText(r, c)));
+        begin
+          // Find longest text in column...
+          for r := GetFirstDataRowIndex to GetLastDataRowIndex do
+            fs := Max(fs, Length(FWorksheet.ReadAsText(r, c)));
+          // ... and round it up to a multiple of 10 for edition ---> VarChars to be introduced later!
+          fs := (fs div 10) * 10 + 10;
+        end;
       ftInteger:    // Distinguish between integer and float
         for r := GetFirstDataRowIndex to GetLastDataRowIndex do
         begin
@@ -447,8 +449,8 @@ begin
             cell := FWorksheet.FindCell(r, c);
             if cell = nil then
               continue;
-            if frac(cell^.DateTimeValue) <> 0 then isDate := false;
-            if (cell^.DateTimeValue > 0) then isTime := false;
+            if frac(cell^.DateTimeValue) <> 0 then isDate := false;  // Non-integer date/time is date
+            if (cell^.DateTimeValue > 0) then isTime := false;       // We assume that time is only between 0:00 and 23:59:59.999
             if (not isDate) and (not isTime) then break;
           end;
           if isDate then ft := ftDate;
@@ -587,14 +589,15 @@ begin
   Result := FDataSize;
 end;
 
-// Extracts the data value of a specific field from the active buffer and copies
-// it to the memory to which Buffer points.
-// Adapted from TMemDataset
+{ Extracts the data value of a specific field from the active buffer and copies
+  it to the memory to which Buffer points.
+  Returns false when nothing is copied.
+  Adapted from TMemDataset. }
 function TsWorksheetDataset.GetFieldData(Field: TField; Buffer: Pointer): Boolean;
 var
   srcBuffer: TRecordBuffer;
   idx: Integer;
-  dt: TDateTime;
+  dt: TDateTime = 0;
   {%H-}dtr: TDateTimeRec;
 begin
   Result := GetActiveBuffer(srcBuffer);
@@ -604,21 +607,21 @@ begin
   idx := Field.FieldNo - 1;
   if idx >= 0 then
   begin
-//    Result := not GetFieldIsNull(pointer(srcBuffer), idx);
-//    if Result and Assigned(Buffer) then
-    if Assigned(Buffer) then
+    Result := not GetFieldIsNull(srcBuffer, Field);
+    if Result and Assigned(Buffer) then
     begin
       inc(srcBuffer, FFieldOffsets[idx]);
+      // The srcBuffer contains date/time values as TDateTime, but
+      // TDataset expects them to be TDateTimeRec --> convert to TDateTimeRec
       if (Field.DataType in [ftDate, ftTime, ftDateTime]) then
       begin
-        Move(srcBuffer^, dt, Field.DataSize);
-        dtr := DateTimeToNative(Field.DataType, dt);
+        Move(srcBuffer^, dt, SizeOf(TDateTime));
+        dtr := DateTimeToDateTimeRec(Field.DataType, dt);
         Move(dtr, Buffer^, SizeOf(TDateTimeRec));
       end else begin
         Move(srcBuffer^, Buffer^, Field.DataSize);
       end;
-    end else
-      Result := false;
+    end;
   end else
   begin  // Calculated, Lookup
     inc(srcBuffer, RecordSize + Field.Offset);
@@ -653,6 +656,19 @@ begin
 end;
 }
 
+{ Returns true when the field is null, i.e. when its bit in the null mask is set. }
+function TsWorksheetDataset.GetFieldIsNull(Buffer: TRecordBuffer; Field: TField): Boolean;
+var
+  nullMask: PByte;
+  n: Integer = 0;
+  m: Integer = 0;
+begin
+  DivMod(Field.FieldNo - 1, 8, n, m);
+  nullMask := GetNullMaskPtr(Buffer);
+  inc(nullMask, n);
+  Result := nullMask^ and (1 shl m) <> 0;
+end;
+
 // Returns the worksheet row index of the record. This is the row
 // following the first worksheet row because that is reserved for the column
 // titles (field names).
@@ -665,6 +681,25 @@ end;
 function TsWorksheetDataset.GetLastDataRowIndex: TRowIndex;
 begin
   Result := FLastRow;
+end;
+
+{ Calculates the pointer to the position of the null mask in the buffer.
+  The null mask is after the data block. }
+function TsWorksheetDataset.GetNullMaskPtr(Buffer: TRecordBuffer): Pointer;
+begin
+  Result := Buffer;
+  inc(Result, GetDataSize);
+end;
+
+// The information whether a field is NULL is stored in the bits of the
+// "Null mask". Each bit corresponds to a field.
+// Calculates the size of the null mask.
+function TsWorksheetDataset.GetNullMaskSize: Integer;
+var
+  n: Integer;
+begin
+  n := FieldDefs.Count;
+  Result := n div 8 + 1;
 end;
 
 // Returns the number of the current record.
@@ -742,14 +777,17 @@ end;
 // Returns a pointer to the bookmark block inside the given buffer.
 function TsWorksheetDataset.GetRecordInfoPtr(Buffer: TRecordBuffer): PsRecordInfo;
 begin
-  Result := PsRecordInfo(Buffer + GetDataSize);
+  Result := PsRecordInfo(Buffer + GetDataSize + GetNullMaskSize);
 end;
 
-// Determines the size of the full record buffer, data block plus record info
+{ Determines the size of the full record buffer:
+  - data block: a contiguous field of bytes consisting of the field values
+  - null mask: a bit mask storing the information that a field is null
+  - Record Info: the bookmark part of the record }
 function TsWorksheetDataset.GetRecordSize: Word;
 begin
   if FRecordBufferSize = -1 then
-    FRecordBufferSize := GetDataSize + SizeOf(TsRecordInfo);
+    FRecordBufferSize := GetDataSize + GetNullMaskSize + SizeOf(TsRecordInfo);
   Result := FRecordBufferSize;
 end;
 
@@ -895,12 +933,16 @@ var
   row: TRowIndex;
   col: TColIndex;
   cell: PCell;
-  i: Integer;
+  {%H-}i: Integer;
   s: String;
-  b: WordBool;
+  {%H-}b: WordBool;
+  nullMask: Pointer;
 
   //P, Q: TRecordBuffer;
 begin
+  nullMask := GetNullMaskPtr(Buffer);
+  FillChar(nullMask^, GetNullMaskSize, 0);
+
   //P := Buffer;
   //Q := Buffer;
 
@@ -909,7 +951,9 @@ begin
   begin
     col := ColIndexFromField(field);
     cell := FWorksheet.FindCell(row, col);
-    if cell <> nil then
+    if cell = nil then
+      SetFieldIsNull(Buffer, field)
+    else
       case cell^.ContentType of
         cctUTF8String:
           begin
@@ -934,12 +978,16 @@ begin
               ;
           end;
         cctDateTime:
+          // TDataset handles date/time value as TDateTimeRec but expects them
+          // to be TDateTime in the buffer. How strange!
           Move(cell^.DateTimeValue, Buffer^, SizeOf(TDateTime));
         cctBool:
           begin
             b := cell^.BoolValue;    // Boolean field stores value as wordbool
             Move(b, Buffer^, SizeOf(b));
           end;
+        cctEmpty:
+          SetFieldIsNull(Buffer, Field);
         else
           ;
       end;
@@ -1120,14 +1168,16 @@ begin
   FRecNo := ARow - GetFirstDataRowIndex;
 end;
 
-// Copies the data to which Buffer points to the position in the active buffer
-// which belongs to the specified field.
-// Adapted from TMemDataset
+{ Copies the data to which Buffer points to the position in the active buffer
+  which belongs to the specified field.
+  Adapted from TMemDataset. }
 procedure TsWorksheetDataset.SetFieldData(Field: TField; Buffer: Pointer);
 var
   destBuffer: TRecordBuffer;
   idx: Integer;
   fsize: Integer;
+  {%H-}dt: TDateTime;
+  dtr: TDateTimeRec;
 begin
   if not GetActiveBuffer(destBuffer) then
     exit;
@@ -1138,15 +1188,27 @@ begin
     if State in [dsEdit, dsInsert, dsNewValue] then
       Field.Validate(Buffer);
     if Buffer = nil then
-//      SetFieldIsNull(Pointer(destBuffer), idx)
+      SetFieldIsNull(destBuffer, Field)
     else
     begin
-//      ClearFieldIsNull(Pointer(destBuffer), idx);
+      ClearFieldIsNull(destBuffer, Field);
       inc(destBuffer, FFieldOffsets[idx]);
-      fsize := Field.DataSize;
-      if Field.DataType = ftString then
-        dec(fSize);  // Do not move terminating 0 which is included in DataSize
-      Move(Buffer^, destBuffer^, fsize);
+      if Field.DataType in [ftDate, ftTime, ftDateTime] then
+      begin
+        // Special treatment for date/time values: TDataset expects them
+        // to be TDateTime in the destBuffer, but to be TDateTimeRec in the
+        // input Buffer.
+        dtr := Default(TDateTimeRec);
+        Move(Buffer^, dtr, SizeOf(dtr));
+        dt := DateTimeRecToDateTime(Field.DataType, dtr);
+        Move(dt, destBuffer^, SizeOf(dt));
+      end else
+      begin
+        fsize := Field.DataSize;
+        if Field.DataType = ftString then
+          dec(fSize);  // Do not move terminating 0 which is included in DataSize
+        Move(Buffer^, destBuffer^, fsize);
+      end;
     end;
   end else
   begin  // Calculated, Lookup
@@ -1175,7 +1237,20 @@ begin
 end;
 }
 
-procedure TsWorksheetDataset.SetFilterText(AValue: string);
+procedure TsWorksheetDataset.SetFieldIsNull(Buffer: TRecordBuffer; Field: TField);
+var
+  nullMask: PByte;
+  n: Integer = 0;
+  m: Integer = 0;
+begin
+  DivMod(Field.FieldNo - 1, 8, n, m);
+  nullMask := GetNullMaskPtr(Buffer);
+  inc(nullMask, n);
+  nullMask^ := nullMask^ or (1 shl m);
+end;
+
+
+procedure TsWorksheetDataset.SetFilterText(const AValue: string);
 begin
   // Just do nothing; filter is not implemented
 end;

@@ -15,6 +15,7 @@ type
   TForm1 = class(TForm)
     btnFind: TButton;
     Button1: TButton;
+    Button2: TButton;
     CheckBox1: TCheckBox;
     cmbFields: TComboBox;
     DataSource1: TDataSource;
@@ -30,6 +31,7 @@ type
     Label2: TLabel;
     procedure btnFindClick(Sender: TObject);
     procedure Button1Click(Sender: TObject);
+    procedure Button2Click(Sender: TObject);
     procedure CheckBox1Change(Sender: TObject);
     procedure FormCreate(Sender: TObject);
   private
@@ -86,6 +88,7 @@ begin
     TsFieldDef(FDataset.FieldDefs[i]).Column := i;
 
   FDataset.Open;
+
   DataSource1.Dataset := FDataset;
   DBEdit1.Datafield := 'IntCol';
   DBEdit2.DataField := 'StringCol3';
@@ -130,6 +133,11 @@ begin
     d := v[1];
     ShowMessage('DateCol = ' + VarToStr(v[0]) + LineEnding + 'FloatCol = ' + FormatFloat('0.00', d));
   end;
+end;
+
+procedure TForm1.Button2Click(Sender: TObject);
+begin
+  ShowMessage(FDataset.Fields[0].AsString);
 end;
 
 end.
