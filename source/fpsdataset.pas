@@ -26,6 +26,7 @@
   * Locate: working
   * Lookup: working
   * Edit: working, Post and Cancel ok
+  * Delete: working
   * NULL fields: working
   * GetBookmark, GotoBookmark: working
 
@@ -34,7 +35,6 @@
   * Indexes: not implemented
   * Sorting: not implemented
   * Insert: not yet implemented - there is a problem how to handle the bookmarks which are the row numbers so far.
-  * Delete: not yet implemented - there is a problem how to handle the bookmarks which are the row numbers so far.
 -------------------------------------------------------------------------------}
 
 unit fpsDataset;
@@ -119,6 +119,7 @@ type
     function GetRecordCount: LongInt; override;
     function GetRecordSize: Word; override;
     procedure InternalClose; override;
+    procedure InternalDelete; override;
     procedure InternalFirst; override;
     procedure InternalGotoBookmark(ABookmark: Pointer); override;
     procedure InternalInitFieldDefs; override;
@@ -828,6 +829,23 @@ begin
   FDataSize := -1;
   FRecordBufferSize := -1;
   FRecNo := -1;
+end;
+
+procedure TsWorksheetDataset.InternalDelete;
+var
+  row: TRowIndex;
+begin
+  if (FRecNo <0) or (FRecNo >= GetRecordCount) then
+    exit;
+
+  row := GetRowIndexFromRecNo(FRecNo);
+  FWorksheet.DeleteRow(row);
+  dec(FRecordCount);
+  if FRecordCount = 0 then
+    FRecNo := -1
+  else
+  if FRecNo >= FRecordCount then FRecNo := FRecordCount - 1;
+  FModified := true;
 end;
 
 // Moves the cursor to the first record, the first data row in the worksheet
