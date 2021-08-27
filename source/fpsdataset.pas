@@ -17,22 +17,24 @@
   Much of the code is adapted from TMemDataset.
 
   Current status (Aug 24, 2021):
-  * Field defs: determined automatically from file, external fielddefs are ignored
-    Required, Unique etc not supported ATM.
+  * Field defs: determined automatically from file
+  * Field defs defined by user: working (requires AutoFieldDefs = false)
   * Fields: working
   * Field types: ftFloat, ftInteger, ftDateTime, ftDate, ftTime, ftString, ftBoolean
-  * Calculated fields: to be tested
+  * Calculated fields: in code, but not tested, yet.
   * Persistent fields: to be done
   * Locate: working
   * Lookup: working
   * Edit: working, Post and Cancel ok
+  * NULL fields: working
+  * GetBookmark, GotoBookmark: working
 
+  ' Field defs: Required, Unique etc not supported ATM.
   * Filter: only by OnFilter event, not working currently.
   * Indexes: not implemented
   * Sorting: not implemented
   * Insert: not yet implemented - there is a problem how to handle the bookmarks which are the row numbers so far.
   * Delete: not yet implemented - there is a problem how to handle the bookmarks which are the row numbers so far.
-  * Scrolling issue: overwrites NULL fields with value from one of the buffer records.
 -------------------------------------------------------------------------------}
 
 unit fpsDataset;
