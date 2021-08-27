@@ -102,10 +102,6 @@ type
     function GetRecordInfoPtr(Buffer: TRecordBuffer): PsRecordInfo;
     function GetRowIndexFromRecNo(ARecNo: Integer): TRowIndex;
     procedure SetCurrentRow(ARow: TRowIndex);
-    // Null mask
-    procedure ClearFieldIsNull(Buffer: TRecordBuffer; Field: TField);
-    function GetFieldIsNull(Buffer: TRecordBuffer; Field: TField): Boolean;
-    procedure SetFieldIsNull(Buffer: TRecordBuffer; Field: TField);
   protected
     // methods inherited from TDataset
     function AllocRecordBuffer: TRecordBuffer; override;
@@ -193,6 +189,51 @@ implementation
 
 uses
   Math, Variants;
+
+{ Null mask handling
+
+  The null mask is a part of the record buffer which stores in its bits the
+  information which fields are NULL. Since all bytes in a new record all bits
+  are cleared and a new record has NULL fields the logic must "inverted", i.e.
+  a 0-bit means: "field is NULL", and a 1-bit means "field is not NULL". }
+
+{ Clears the information that the field is null by setting the corresponding
+  bit in the null mask. }
+procedure ClearFieldIsNull(NullMask: PByte; FieldNo: Integer);
+var
+  n: Integer = 0;
+  m: Integer = 0;
+begin
+  DivMod(FieldNo - 1, 8, n, m);
+  inc(NullMask, n);
+  // Set the bit to indicate that the field is not NULL.
+  NullMask^ := NullMask^ or (1 shl m);
+end;
+
+{ Returns true when the field is null, i.e. when its bit in the null mask is not set. }
+function GetFieldIsNull(NullMask: PByte; FieldNo: Integer): Boolean;
+var
+  n: Integer = 0;
+  m: Integer = 0;
+begin
+  DivMod(FieldNo - 1, 8, n, m);
+  inc(NullMask, n);
+  Result := NullMask^ and (1 shl m) = 0;
+end;
+
+{ Clears in the null mask the bit corresponding to FieldNo to indicate that the
+  associated field is NULL. }
+procedure SetFieldIsNull(NullMask: PByte; FieldNo: Integer);
+var
+  n: Integer = 0;
+  m: Integer = 0;
+begin
+  DivMod(FieldNo - 1, 8, n, m);
+  inc(NullMask, n);
+  NullMask^ := nullMask^ and not (1 shl m);
+end;
+
+
 
 { TsFieldDef }
 
@@ -303,20 +344,6 @@ end;
 procedure TsWorksheetDataset.ClearCalcFields(Buffer: TRecordBuffer);
 begin
   FillChar(Buffer[RecordSize], CalcFieldsSize, 0);
-end;
-
-{ Clears the information that the field is null by clearing the corresponding
-  bit in the null mask. }
-procedure TsWorksheetDataset.ClearFieldIsNull(Buffer: TRecordBuffer; Field: TField);
-var
-  nullMask: PByte;
-  n: Integer = 0;
-  m: Integer = 0;
-begin
-  nullMask := GetNullMaskPtr(Buffer);
-  DivMod(Field.FieldNo - 1, 8, n, m);
-  inc(nullMask, n);
-  nullMask^ := nullMask^ and not (1 shl m);
 end;
 
 { Determines the worksheet column index for a specific field }
@@ -607,14 +634,14 @@ begin
   idx := Field.FieldNo - 1;
   if idx >= 0 then
   begin
-    Result := not GetFieldIsNull(srcBuffer, Field);
+    Result := not GetFieldIsNull(GetNullMaskPtr(srcBuffer), Field.FieldNo);
     if Result and Assigned(Buffer) then
     begin
       inc(srcBuffer, FFieldOffsets[idx]);
-      // The srcBuffer contains date/time values as TDateTime, but
-      // TDataset expects them to be TDateTimeRec --> convert to TDateTimeRec
       if (Field.DataType in [ftDate, ftTime, ftDateTime]) then
       begin
+        // The srcBuffer contains date/time values as TDateTime, but
+        // TDataset expects them to be TDateTimeRec --> convert to TDateTimeRec
         Move(srcBuffer^, dt, SizeOf(TDateTime));
         dtr := DateTimeToDateTimeRec(Field.DataType, dt);
         Move(dtr, Buffer^, SizeOf(TDateTimeRec));
@@ -655,19 +682,6 @@ begin
   end;
 end;
 }
-
-{ Returns true when the field is null, i.e. when its bit in the null mask is set. }
-function TsWorksheetDataset.GetFieldIsNull(Buffer: TRecordBuffer; Field: TField): Boolean;
-var
-  nullMask: PByte;
-  n: Integer = 0;
-  m: Integer = 0;
-begin
-  DivMod(Field.FieldNo - 1, 8, n, m);
-  nullMask := GetNullMaskPtr(Buffer);
-  inc(nullMask, n);
-  Result := nullMask^ and (1 shl m) <> 0;
-end;
 
 // Returns the worksheet row index of the record. This is the row
 // following the first worksheet row because that is reserved for the column
@@ -936,14 +950,9 @@ var
   {%H-}i: Integer;
   s: String;
   {%H-}b: WordBool;
-  nullMask: Pointer;
-
-  //P, Q: TRecordBuffer;
+  bufferStart: TRecordBuffer;
 begin
-  nullMask := GetNullMaskPtr(Buffer);
-  FillChar(nullMask^, GetNullMaskSize, 0);
-
-  //P := Buffer;
+  bufferStart := Buffer;
   //Q := Buffer;
 
   row := GetRowIndexFromRecNo(ARecNo);
@@ -952,8 +961,10 @@ begin
     col := ColIndexFromField(field);
     cell := FWorksheet.FindCell(row, col);
     if cell = nil then
-      SetFieldIsNull(Buffer, field)
+      SetFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo)
     else
+    begin
+      ClearFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo);
       case cell^.ContentType of
         cctUTF8String:
           begin
@@ -987,10 +998,11 @@ begin
             Move(b, Buffer^, SizeOf(b));
           end;
         cctEmpty:
-          SetFieldIsNull(Buffer, Field);
+          SetFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo);
         else
           ;
       end;
+    end;
     inc(Buffer, field.DataSize);
   end;
                        (*
@@ -1188,10 +1200,10 @@ begin
     if State in [dsEdit, dsInsert, dsNewValue] then
       Field.Validate(Buffer);
     if Buffer = nil then
-      SetFieldIsNull(destBuffer, Field)
+      SetFieldIsNull(GetNullMaskPtr(destBuffer), Field.FieldNo)
     else
     begin
-      ClearFieldIsNull(destBuffer, Field);
+      ClearFieldIsNull(GetNullMaskPtr(destBuffer), Field.FieldNo);
       inc(destBuffer, FFieldOffsets[idx]);
       if Field.DataType in [ftDate, ftTime, ftDateTime] then
       begin
@@ -1237,19 +1249,6 @@ begin
 end;
 }
 
-procedure TsWorksheetDataset.SetFieldIsNull(Buffer: TRecordBuffer; Field: TField);
-var
-  nullMask: PByte;
-  n: Integer = 0;
-  m: Integer = 0;
-begin
-  DivMod(Field.FieldNo - 1, 8, n, m);
-  nullMask := GetNullMaskPtr(Buffer);
-  inc(nullMask, n);
-  nullMask^ := nullMask^ or (1 shl m);
-end;
-
-
 procedure TsWorksheetDataset.SetFilterText(const AValue: string);
 begin
   // Just do nothing; filter is not implemented
@@ -1283,8 +1282,11 @@ begin
     if (Length(data) = 0) then
     begin
       if cell <> nil then
-        FWorksheet.DeleteCell(cell);
+        FWorksheet.WriteBlank(cell)  //FWorksheet.DeleteCell(cell);
     end else
+    if GetFieldIsNull(GetNullMaskPtr(Buffer), field.FieldNo) then
+      FWorksheet.WriteBlank(cell)  //FWorksheet.DeleteCell(cell)
+    else
     begin
       P := Buffer + FFieldOffsets[field.Index];
       Move(P^, data[0], field.DataSize);
@@ -1297,7 +1299,7 @@ begin
         ftDateTime, ftDate, ftTime:
           FWorksheet.WriteDateTime(cell, PDateTime(@data[0])^);
         ftBoolean:
-          FWorksheet.WriteBoolValue(cell, PBoolean(@data[0])^);
+          FWorksheet.WriteBoolValue(cell, PWordBool(@data[0])^);
         ftString:
           FWorksheet.WriteText(cell, StrPas(PChar(@data[0])));
         else

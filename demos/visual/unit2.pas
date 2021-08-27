@@ -92,9 +92,10 @@ begin
   FDataset.FieldDefs.Add('BoolCol', ftBoolean);
   for i := 0 to FDataset.FieldDefs.Count-1 do
     TsFieldDef(FDataset.FieldDefs[i]).Column := i;
-  FDataset.Open;
 
+  FDataset.Open;
   DataSource1.Dataset := FDataset;
+
   DBEdit1.Datafield := 'IntCol';
   DBEdit2.DataField := 'StringCol3';
   DBEdit3.Datafield := 'StringCol5';
@@ -103,6 +104,7 @@ begin
   (FDataset.FieldByName('FloatCol') as TFloatField).DisplayFormat := '0.000';
   FDataset.GetFieldNames(cmbFields.Items);
   cmbFields.ItemIndex := 0;
+
 end;
 
 procedure TForm1.CheckBox1Change(Sender: TObject);
