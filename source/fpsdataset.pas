@@ -16,7 +16,7 @@
 
   Much of the code is adapted from TMemDataset.
 
-  Current status (Aug 24, 2021):
+  Current status (Aug 27, 2021):
   * Field defs: determined automatically from file
   * Field defs defined by user: working (requires AutoFieldDefs = false)
   * Fields: working
@@ -25,8 +25,7 @@
   * Persistent fields: to be done
   * Locate: working
   * Lookup: working
-  * Edit: working, Post and Cancel ok
-  * Delete: working
+  * Edit, Delete, Insert: working, Post and Cancel ok
   * NULL fields: working
   * GetBookmark, GotoBookmark: working
 
@@ -34,7 +33,9 @@
   * Filter: only by OnFilter event, not working currently.
   * Indexes: not implemented
   * Sorting: not implemented
-  * Insert: not yet implemented - there is a problem how to handle the bookmarks which are the row numbers so far.
+  * Append: not yet implemented
+  * Issue when date/time values are entered: value displayed correctly but after reopening value is 0 (31.12.1899)
+  * Bookmark moves up by 1 when a record is inserted before bookmark
 -------------------------------------------------------------------------------}
 
 unit fpsDataset;
@@ -118,6 +119,7 @@ type
       DoCheck: Boolean): TGetResult; override;
     function GetRecordCount: LongInt; override;
     function GetRecordSize: Word; override;
+    procedure InternalAddRecord(Buffer: Pointer; DoAppend: Boolean); override;
     procedure InternalClose; override;
     procedure InternalDelete; override;
     procedure InternalFirst; override;
@@ -661,31 +663,6 @@ begin
   end;
 end;
 
-{
-function TsWorksheetDataset.GetFieldData(Field: TField; Buffer: Pointer): Boolean;
-var
-  P: PChar;
-  dt: TDateTime;
-  dtr: TDateTimeRec;
-begin
-  Result := false;
-  if (not IsEmpty) and Assigned(Buffer)  then
-  begin
-    P := ActiveBuffer;
-    inc(P, FFieldOffsets[Field.Index]);
-    if Assigned(Buffer) then
-      if (Field.DataType in [ftDate, ftTime, ftDateTime]) then
-      begin
-        Move(P^, dt, Field.DataSize);
-        dtr := DateTimeToNative(Field.DataType, dt);
-        Move(dtr, Buffer^, SizeOf(TTimeStamp));
-      end else
-        Move(P^, Buffer^, Field.DataSize);
-    Result := true;
-  end;
-end;
-}
-
 // Returns the worksheet row index of the record. This is the row
 // following the first worksheet row because that is reserved for the column
 // titles (field names).
@@ -811,6 +788,18 @@ end;
 function TsWorksheetDataset.GetRowIndexFromRecNo(ARecNo: Integer): TRowIndex;
 begin
   Result := GetFirstDataRowIndex + ARecNo;
+end;
+
+procedure TsWorksheetDataset.InternalAddRecord(Buffer: Pointer; DoAppend: Boolean);
+var
+  row: TRowIndex;
+begin
+  row := GetRowIndexFromRecNo(FRecNo);
+  FWorksheet.InsertRow(row);
+  inc(FLastRow);
+  Inc(FRecordCount);
+  WriteBufferToWorksheet(Buffer);
+  FModified := true;
 end;
 
 // Closes the dataset
@@ -1254,21 +1243,6 @@ begin
     DataEvent(deFieldChange, PtrInt(Field));
 end;
 
-{
-procedure TsWorksheetDataset.SetFieldData(Field: TField; Buffer: Pointer);
-var
-  P: PChar;
-begin
-  P := ActiveBuffer;
-  inc(P, FFieldOffsets[Field.Index]);
-  if Assigned(Buffer) then
-    Move(Buffer^, P^, SizeOf(Field.DataSize))
-  else
-    DatabaseError('Very bad error in SetFieldData');
-  DataEvent(deFieldChange, PtrInt(Field));
-end;
-}
-
 procedure TsWorksheetDataset.SetFilterText(const AValue: string);
 begin
   // Just do nothing; filter is not implemented
@@ -1290,7 +1264,6 @@ var
   col: TColIndex;
   cell: PCell;
   field: TField;
-  data: TBytes = nil;
   P: Pointer;
 begin
   row := GetCurrentRowIndex;
@@ -1298,30 +1271,34 @@ begin
   for field in Fields do begin
     col := ColIndexFromField(field);
     cell := FWorksheet.FindCell(row, col);
-    SetLength(data, field.DataSize);
-    if (Length(data) = 0) then
-    begin
-      if cell <> nil then
-        FWorksheet.WriteBlank(cell)  //FWorksheet.DeleteCell(cell);
-    end else
     if GetFieldIsNull(GetNullMaskPtr(Buffer), field.FieldNo) then
-      FWorksheet.WriteBlank(cell)  //FWorksheet.DeleteCell(cell)
+      FWorksheet.WriteBlank(cell)
     else
     begin
-      P := Buffer + FFieldOffsets[field.Index];
-      Move(P^, data[0], field.DataSize);
+      P := Buffer + FFieldOffsets[field.FieldNo-1];
       cell := FWorksheet.GetCell(row, col);
       case field.DataType of
         ftFloat:
-          FWorksheet.WriteNumber(cell, PDouble(@data[0])^);
+          if TFloatField(field).Precision >= 15 then
+            FWorksheet.WriteNumber(cell, PDouble(P)^, nfGeneral)
+          else
+            FWorksheet.WriteNumber(cell, PDouble(P)^, nfFixed, TFloatField(field).Precision);
         ftInteger:
-          FWorksheet.WriteNumber(cell, PInteger(@data[0])^);
+          FWorksheet.WriteNumber(cell, PInteger(P)^);
+        ftDateTime:
+          FWorksheet.WriteDateTime(cell, PDateTime(P)^, nfShortDateTime);
+        ftDate:
+          FWorksheet.WriteDateTime(Cell, PDateTime(P)^, nfShortDate);
+        ftTime:
+          FWorksheet.WriteDateTime(cell, PDateTime(P)^, nfLongTime);
+        {
         ftDateTime, ftDate, ftTime:
-          FWorksheet.WriteDateTime(cell, PDateTime(@data[0])^);
+          FWorksheet.WriteDateTime(cell, PDateTime(P)^);
+          }
         ftBoolean:
-          FWorksheet.WriteBoolValue(cell, PWordBool(@data[0])^);
+          FWorksheet.WriteBoolValue(cell, PWordBool(P)^);
         ftString:
-          FWorksheet.WriteText(cell, StrPas(PChar(@data[0])));
+          FWorksheet.WriteText(cell, StrPas(PChar(P)));
         else
           ;
       end;
