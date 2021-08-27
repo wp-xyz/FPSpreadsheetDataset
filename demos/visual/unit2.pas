@@ -196,7 +196,7 @@ begin
   else
     FDataset.OnFilterRecord := nil;
   FDataset.Filtered := cbFilter.Checked;
-  FDataset.Refresh;
+  //FDataset.Refresh;
 end;
 
 procedure TForm1.cmbFilterFieldsChange(Sender: TObject);

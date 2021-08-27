@@ -133,6 +133,7 @@ type
     function IsCursorOpen: Boolean; override;
     procedure SetBookmarkData(Buffer: TRecordBuffer; Data: Pointer); override;
     procedure SetBookmarkFlag(Buffer: TRecordBuffer; Value: TBookmarkFlag); override;
+    procedure SetFiltered(Value: Boolean); override;
     procedure SetRecNo(Value: Integer); override;
     // new methods
     procedure CalcFieldOffsets;
@@ -1241,6 +1242,16 @@ begin
 
   if not (State in [dsCalcFields, dsFilter, dsNewValue]) then
     DataEvent(deFieldChange, PtrInt(Field));
+end;
+
+procedure TsWorksheetDataset.SetFiltered(Value: Boolean);
+var
+  changed: Boolean;
+begin
+  changed := Value <> inherited Filtered;
+  inherited;
+  if changed then
+    Refresh;
 end;
 
 procedure TsWorksheetDataset.SetFilterText(const AValue: string);
