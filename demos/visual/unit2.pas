@@ -19,8 +19,10 @@ type
     btnSetBookmark: TButton;
     btnGoToBookmark: TButton;
     Button2: TButton;
-    CheckBox1: TCheckBox;
+    cbFilter: TCheckBox;
     cmbFields: TComboBox;
+    cmbFilterFields: TComboBox;
+    cmbFilterOp: TComboBox;
     DataSource1: TDataSource;
     DBCheckBox1: TDBCheckBox;
     DBEdit1: TDBEdit;
@@ -30,6 +32,7 @@ type
     DBGrid1: TDBGrid;
     DBNavigator1: TDBNavigator;
     edKeyValue: TEdit;
+    edFilterValue: TEdit;
     Label1: TLabel;
     Label2: TLabel;
     procedure btnFindClick(Sender: TObject);
@@ -37,13 +40,19 @@ type
     procedure btnLookupClick(Sender: TObject);
     procedure btnSetBookmarkClick(Sender: TObject);
     procedure Button2Click(Sender: TObject);
-    procedure CheckBox1Change(Sender: TObject);
+    procedure cbFilterChange(Sender: TObject);
+    procedure cmbFilterFieldsChange(Sender: TObject);
+    procedure cmbFilterOpChange(Sender: TObject);
+    procedure edFilterValueChange(Sender: TObject);
     procedure FormCreate(Sender: TObject);
   private
     FDataset: TsWorksheetDataset;
     FBookmark: TBookmark;
     procedure AfterScrollHandler(Dataset: TDataset);
-    procedure FilterRecord(Dataset: TDataset; var Accept: Boolean);
+    procedure ExecFilter;
+    procedure FilterRecord_String(Dataset: TDataset; var Accept: Boolean);
+    procedure FilterRecord_Float(Dataset: TDataset; var Accept: Boolean);
+    procedure FilterRecord_Integer(Dataset: TDataset; var Accept: Boolean);
 
   public
 
@@ -57,7 +66,7 @@ implementation
 {$R *.lfm}
 
 uses
-  Variants;
+  Variants, Math;
 
 const
   DATA_FILE = '../TestData.xlsx';
@@ -69,9 +78,61 @@ begin
   Label1.Caption := 'Record number: ' + IntToStr(Dataset.RecNo);
 end;
 
-procedure TForm1.FilterRecord(Dataset: TDataset; var Accept: Boolean);
+procedure TForm1.FilterRecord_String(Dataset: TDataset; var Accept: Boolean);
+var
+  field: TField;
+  fieldname: string;
+  op: String;
+  value: String;
 begin
-  Accept := Dataset.FieldByName('IntCol').AsInteger > 3;
+  fieldname := cmbFilterFields.Items[cmbFilterFields.ItemIndex];
+  op := cmbFilterOp.Items[cmbFilterOp.ItemIndex];
+  value := edFilterValue.Text;
+
+  field := Dataset.FieldByName(fieldname);
+  case op of
+    '=': Accept := field.AsString = value;
+    '<': Accept := field.AsString < value;
+    '>': Accept := field.AsString > value;
+  end;
+end;
+
+procedure TForm1.FilterRecord_Integer(Dataset: TDataset; var Accept: Boolean);
+var
+  field: TField;
+  fieldname: string;
+  op: String;
+  value: Integer;
+begin
+  fieldname := cmbFilterFields.Items[cmbFilterFields.ItemIndex];
+  op := cmbFilterOp.Items[cmbFilterOp.ItemIndex];
+  value := StrToInt(edFilterValue.Text);
+
+  field := Dataset.FieldByName(fieldname);
+  case op of
+    '=': Accept := field.AsInteger = value;
+    '<': Accept := field.AsInteger < value;
+    '>': Accept := field.AsInteger > value;
+  end;
+end;
+
+procedure TForm1.FilterRecord_Float(Dataset: TDataset; var Accept: Boolean);
+var
+  field: TField;
+  fieldname: string;
+  op: String;
+  value: Double;
+begin
+  fieldname := cmbFilterFields.Items[cmbFilterFields.ItemIndex];
+  op := cmbFilterOp.Items[cmbFilterOp.ItemIndex];
+  value := StrToFloat(edFilterValue.Text);
+
+  field := Dataset.FieldByName(fieldname);
+  case op of
+    '=': Accept := SameValue(field.AsFloat, value);
+    '<': Accept := (field.AsFloat < value) and not SameValue(field.AsFloat, value);
+    '>': Accept := (field.AsFloat > value) and not SameValue(field.AsFloat, value);
+  end;
 end;
 
 procedure TForm1.FormCreate(Sender: TObject);
@@ -83,7 +144,7 @@ begin
   FDataset.SheetName := 'Sheet';
   FDataset.AfterScroll := @AfterScrollHandler;
 
-  FDataset.AutoFieldDefs := true; //false;
+  FDataset.AutoFieldDefs := false; //true; //false;
   FDataset.FieldDefs.Add('IntCol', ftInteger);
   FDataset.FieldDefs.Add('StringCol3', ftString, 3);
   FDataset.FieldDefs.Add('StringCol5', ftString, 5);
@@ -103,17 +164,54 @@ begin
   DBCheckbox1.DataField := 'BoolCol';
   (FDataset.FieldByName('FloatCol') as TFloatField).DisplayFormat := '0.000';
   FDataset.GetFieldNames(cmbFields.Items);
+  FDataset.GetFieldNames(cmbFilterFields.Items);
   cmbFields.ItemIndex := 0;
+  cmbFilterFields.ItemIndex := 0;
 
 end;
 
-procedure TForm1.CheckBox1Change(Sender: TObject);
+procedure TForm1.cbFilterChange(Sender: TObject);
 begin
-  if Checkbox1.Checked then
-    FDataset.OnFilterRecord := @FilterRecord
+  ExecFilter;
+end;
+
+procedure TForm1.ExecFilter;
+var
+  field: TField;
+  fieldName: String;
+begin
+  if cbFilter.Checked then
+  begin
+    fieldName := cmbFilterFields.Items[cmbFilterFields.ItemIndex];
+    field := FDataset.FieldByName(fieldName);
+    if field is TStringField then
+      FDataset.OnFilterRecord := @FilterRecord_String
+    else
+    if field.DataType = ftInteger then
+      FDataset.OnFilterRecord := @FilterRecord_Integer
+    else
+    if field is TFloatField then
+      FDataset.OnFilterRecord := @FilterRecord_Float;
+  end
   else
     FDataset.OnFilterRecord := nil;
-  FDataset.Filtered := Checkbox1.Checked;
+  FDataset.Filtered := cbFilter.Checked;
+  FDataset.Refresh;
+end;
+
+procedure TForm1.cmbFilterFieldsChange(Sender: TObject);
+begin
+  ExecFilter;
+end;
+
+procedure TForm1.cmbFilterOpChange(Sender: TObject);
+begin
+  ExecFilter;
+end;
+
+procedure TForm1.edFilterValueChange(Sender: TObject);
+begin
+  ExecFilter;
 end;
 
 procedure TForm1.btnFindClick(Sender: TObject);
@@ -126,7 +224,8 @@ end;
 
 procedure TForm1.btnGoToBookmarkClick(Sender: TObject);
 begin
-  FDataset.GotoBookmark(FBookmark);
+  if FDataset.BookmarkValid(FBookmark) then
+    FDataset.GotoBookmark(FBookmark);
 end;
 
 procedure TForm1.btnLookupClick(Sender: TObject);

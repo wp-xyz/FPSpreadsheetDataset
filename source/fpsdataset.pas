@@ -28,13 +28,13 @@
   * Edit, Delete, Insert: working, Post and Cancel ok
   * NULL fields: working
   * GetBookmark, GotoBookmark: working
+  * Filter: only by OnFilter event, working.
 
   ' Field defs: Required, Unique etc not supported ATM.
-  * Filter: only by OnFilter event, not working currently.
   * Indexes: not implemented
   * Sorting: not implemented
-  * Append: not yet implemented
-  * Issue when date/time values are entered: value displayed correctly but after reopening value is 0 (31.12.1899)
+
+  Issues
   * Bookmark moves up by 1 when a record is inserted before bookmark
 -------------------------------------------------------------------------------}
 
@@ -1291,10 +1291,6 @@ begin
           FWorksheet.WriteDateTime(Cell, PDateTime(P)^, nfShortDate);
         ftTime:
           FWorksheet.WriteDateTime(cell, PDateTime(P)^, nfLongTime);
-        {
-        ftDateTime, ftDate, ftTime:
-          FWorksheet.WriteDateTime(cell, PDateTime(P)^);
-          }
         ftBoolean:
           FWorksheet.WriteBoolValue(cell, PWordBool(P)^);
         ftString:
