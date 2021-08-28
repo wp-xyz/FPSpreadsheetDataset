@@ -22,7 +22,8 @@
   * Field defs: determined automatically from file
   * Field defs defined by user: working (requires AutoFieldDefs = false)
   * Fields: working
-  * Field types: ftFloat, ftInteger, ftCurrency, ftDateTime, ftDate, ftTime, ftString, ftBoolean
+  * Field types: ftFloat, ftInteger, ftSmallInt, ftWord, ftCurrency,
+    ftDateTime, ftDate, ftTime, ftString, ftFixedChar, ftBoolean
   * Locate: working
   * Lookup: working
   * Edit, Delete, Insert: working, Post and Cancel ok, Append working like Insert.
@@ -37,7 +38,7 @@
   * Indexes: not implemented
   * Sorting: not implemented
   * Support of dsAppend missing.
-  * Support of other integer types.
+  * Support of other integer types: ftWidestring, ftMemo
 
   Issues
   * Bookmark moves down by 1 record when a record is inserted before bookmark
@@ -324,12 +325,22 @@ begin
   for i := 1 to FieldDefs.Count-1 do
   begin
     case FieldDefs[i-1].DataType of
-      ftString: fs := FieldDefs[i-1].Size + 1;  // +1 for zero termination
-      ftInteger: fs := SizeOf(Integer);
-      ftFloat: fs := SizeOf(Double);
-      ftDateTime, ftDate, ftTime: fs := SizeOf(TDateTime);  // date/time values are TDateTime in the buffer
-      ftBoolean: fs := SizeOf(WordBool);  // boolean is expected by TBooleanField to be WordBool
-      else ;
+      ftString, ftFixedChar:
+        fs := FieldDefs[i-1].Size + 1;  // +1 for zero termination
+      ftInteger:
+        fs := SizeOf(Integer);
+      ftSmallInt:
+        fs := SizeOf(SmallInt);
+      ftWord:
+        fs := SizeOf(Word);
+      ftFloat, ftCurrency:
+        fs := SizeOf(Double);
+      ftDateTime, ftDate, ftTime:
+        fs := SizeOf(TDateTime);  // date/time values are TDateTime in the buffer
+      ftBoolean:
+        fs := SizeOf(WordBool);  // boolean is expected by TBooleanField to be WordBool
+      else
+        fs := 0;
     end;
     FFieldOffsets[i] := FFieldOffsets[i-1] + fs;
   end;
@@ -415,8 +426,10 @@ begin
   FTableCreated := true;
 end;
 
-// Determines the offsets for each field in the buffers to be used when
-// accessing records.
+{ Automatic detection of field types and field sizes, as well as the offsets
+  for each field in the buffers to be used when accessing records.
+  Is called in case of auto-detection from a spreadsheet file (i.e. when
+  AutoFieldDefs is true and no other field defs have been defined. }
 procedure TsWorksheetDataset.DetectFieldDefs;
 var
   r, c: Integer;
@@ -461,15 +474,19 @@ begin
             ft := ftFloat
           else
             ft := ftInteger;    // float will be checked further below
-        cctUTF8String: ft := ftString;
-        cctDateTime: ft := ftDateTime; // ftDate, ftTime will be checked below
-        cctBool: ft := ftBoolean;
-        else continue;
+        cctUTF8String:
+          ft := ftString;
+        cctDateTime:
+          ft := ftDateTime; // ftDate, ftTime will be checked below
+        cctBool:
+          ft := ftBoolean;
+        else
+          continue;
       end;
       break;
     end;
 
-    // Determine field size
+    // Determine field size and distinguish between similar field types
     fs := 0;
     case ft of
       ftString:
@@ -525,6 +542,8 @@ begin
   CalcFieldOffsets;
 end;
 
+{ Is called before the workbook is opened: checks for filename and sheet name
+  as well as file existence. }
 procedure TsWorksheetDataset.DoBeforeOpen;
 begin
   if (FFileName = '') then
@@ -989,8 +1008,10 @@ var
   row: TRowIndex;
   col: TColIndex;
   cell: PCell;
-  {%H-}i: Integer;
   s: String;
+  {%H-}i: Integer;
+  {%H-}si: SmallInt;
+  {%H-}w: word;
   {%H-}b: WordBool;
   bufferStart: TRecordBuffer;
 begin
@@ -1017,14 +1038,24 @@ begin
           case field.DataType of
             ftFloat:
               Move(cell^.NumberValue, Buffer^, SizeOf(cell^.NumberValue));
+            ftCurrency:
+              Move(cell^.NumberValue, Buffer^, SizeOf(cell^.Numbervalue));
             ftInteger:
               begin
                 i := Round(cell^.NumberValue);
                 Move(i, Buffer^, SizeOf(i));
               end;
-            ftCurrency:
-              Move(cell^.NumberValue, Buffer^, SizeOf(cell^.Numbervalue));
-            ftString:
+            ftSmallInt:
+              begin
+                si := round(cell^.NumberValue);
+                Move(si, Buffer^, SizeOf(si));
+              end;
+            ftWord:
+              begin
+                w := round(cell^.NumberValue);
+                Move(w, Buffer^, SizeOf(w));
+              end;
+            ftString, ftFixedChar:
               begin
                 s := FWorksheet.ReadAsText(cell) + #0;
                 Move(s[1], Buffer^, Length(s));
@@ -1049,28 +1080,6 @@ begin
     end;
     inc(Buffer, field.DataSize);
   end;
-                       (*
-  for field in Fields do
-  begin
-    P := P + FFieldOffsets[field.Index];
-    case field.Datatype of
-      ftString: WriteLn(field.Index, ': ', PChar(P));
-      ftInteger: WriteLn(field.Index, ': ', PInteger(P)^);
-      ftFloat: WriteLn(field.Index, ': ', PDouble(P)^);
-      ftDateTime: WriteLn(field.Index, ': ', PDateTime(P)^);
-      ftBoolean: WriteLn(field.Index, ': ', PWordBool(P)^);
-      else ;
-    end;
-  end;
-
-  for i := 0 to RecordSize-1 do
-  begin
-    Write(Format('%.2x ', [byte(Q^)]));
-    inc(Q);
-  end;
-  WriteLn;
-  *)
-
 end;
 
 { Searches the first record for which the fields specified by Keyfields
@@ -1281,7 +1290,7 @@ begin
       end else
       begin
         fsize := Field.DataSize;
-        if Field.DataType = ftString then
+        if Field.DataType in [ftString, ftFixedChar] then
           dec(fSize);  // Do not move terminating 0 which is included in DataSize
         Move(Buffer^, destBuffer^, fsize);
       end;
@@ -1367,6 +1376,10 @@ begin
           FWorksheet.WriteCurrency(cell, PDouble(P)^, nfCurrency, 2);
         ftInteger:
           FWorksheet.WriteNumber(cell, PInteger(P)^);
+        ftSmallInt:
+          FWorksheet.WriteNumber(cell, PSmallInt(P)^);
+        ftWord:
+          FWorksheet.WriteNumber(cell, PWord(P)^);
         ftDateTime:
           FWorksheet.WriteDateTime(cell, PDateTime(P)^, nfShortDateTime);
         ftDate:
@@ -1375,7 +1388,7 @@ begin
           FWorksheet.WriteDateTime(cell, PDateTime(P)^, nfLongTime);
         ftBoolean:
           FWorksheet.WriteBoolValue(cell, PWordBool(P)^);
-        ftString:
+        ftString, ftFixedChar:
           FWorksheet.WriteText(cell, StrPas(PChar(P)));
         else
           ;

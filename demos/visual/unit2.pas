@@ -147,14 +147,18 @@ begin
   FDataset.SheetName := 'Sheet';
   FDataset.AfterScroll := @AfterScrollHandler;
 
+  {
   FDataset.AutoFieldDefs := false;
   FDataset.FieldDefs.Add('IntCol', ftInteger);
+  FDataset.FieldDefs.Add('SmallIntCol', ftSmallInt);
+  FDataset.FieldDefs.Add('WordCol', ftWord);
   FDataset.FieldDefs.Add('StringCol3', ftString, 3);
   FDataset.FieldDefs.Add('StringCol5', ftString, 5);
   FDataset.FieldDefs.Add('FloatCol', ftFloat);
   FDataset.FieldDefs.Add('DateCol', ftDate);
   FDataset.FieldDefs.Add('BoolCol', ftBoolean);
   FDataset.FieldDefs.Add('CurrencyCol', ftCurrency);
+  }
   for i := 0 to FDataset.FieldDefs.Count-1 do
     TsFieldDef(FDataset.FieldDefs[i]).Column := i;
 
