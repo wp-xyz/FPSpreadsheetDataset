@@ -2,10 +2,10 @@ object Form1: TForm1
   Left = 285
   Height = 555
   Top = 131
-  Width = 1036
+  Width = 1171
   Caption = 'Form1'
   ClientHeight = 555
-  ClientWidth = 1036
+  ClientWidth = 1171
   OnCreate = FormCreate
   LCLVersion = '2.3.0.0'
   object DBEdit1: TDBEdit
@@ -64,7 +64,7 @@ object Form1: TForm1
     Left = 448
     Height = 536
     Top = 8
-    Width = 575
+    Width = 710
     Anchors = [akTop, akLeft, akRight, akBottom]
     Color = clWindow
     Columns = <>

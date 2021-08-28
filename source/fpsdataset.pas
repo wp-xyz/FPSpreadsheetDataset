@@ -22,7 +22,7 @@
   * Field defs: determined automatically from file
   * Field defs defined by user: working (requires AutoFieldDefs = false)
   * Fields: working
-  * Field types: ftFloat, ftInteger, ftDateTime, ftDate, ftTime, ftString, ftBoolean
+  * Field types: ftFloat, ftInteger, ftCurrency, ftDateTime, ftDate, ftTime, ftString, ftBoolean
   * Locate: working
   * Lookup: working
   * Edit, Delete, Insert: working, Post and Cancel ok, Append working like Insert.
@@ -37,7 +37,7 @@
   * Indexes: not implemented
   * Sorting: not implemented
   * Support of dsAppend missing.
-  * Support of field type ftCurrency and other integer types.
+  * Support of other integer types.
 
   Issues
   * Bookmark moves down by 1 record when a record is inserted before bookmark
@@ -203,7 +203,7 @@ type
 implementation
 
 uses
-  Math, Variants;
+  Math, Variants, fpsNumFormat;
 
 { Null mask handling
 
@@ -427,6 +427,8 @@ var
   ft: TFieldType;
   fs: Integer;
   isDate, isTime: Boolean;
+  fmt: TsCellFormat;
+  numFmt: TsNumFormatParams;
 begin
   FieldDefs.Clear;
 
@@ -448,8 +450,17 @@ begin
       cell := FWorksheet.FindCell(r, c);
       if (cell = nil) then
         continue;
+      fmt := FWorkbook.GetCellFormat(FWorksheet.GetEffectiveCellFormatIndex(cell));
+      numFmt := FWorkbook.GetNumberFormat(fmt.NumberFormatIndex);
       case cell^.ContentType of
-        cctNumber: ft := ftInteger;    // float will be checked below
+        cctNumber:
+          if IsCurrencyFormat(numfmt) then
+            ft := ftCurrency
+          else
+          if (numfmt <> nil) and (CountDecs(numfmt.NumFormatStr) > 0) then
+            ft := ftFloat
+          else
+            ft := ftInteger;    // float will be checked further below
         cctUTF8String: ft := ftString;
         cctDateTime: ft := ftDateTime; // ftDate, ftTime will be checked below
         cctBool: ft := ftBoolean;
@@ -1011,6 +1022,8 @@ begin
                 i := Round(cell^.NumberValue);
                 Move(i, Buffer^, SizeOf(i));
               end;
+            ftCurrency:
+              Move(cell^.NumberValue, Buffer^, SizeOf(cell^.Numbervalue));
             ftString:
               begin
                 s := FWorksheet.ReadAsText(cell) + #0;
@@ -1350,6 +1363,8 @@ begin
             FWorksheet.WriteNumber(cell, PDouble(P)^, nfGeneral)
           else
             FWorksheet.WriteNumber(cell, PDouble(P)^, nfFixed, TFloatField(field).Precision);
+        ftCurrency:
+          FWorksheet.WriteCurrency(cell, PDouble(P)^, nfCurrency, 2);
         ftInteger:
           FWorksheet.WriteNumber(cell, PInteger(P)^);
         ftDateTime:
