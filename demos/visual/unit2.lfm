@@ -74,11 +74,11 @@ object Form1: TForm1
   object cbFilter: TCheckBox
     AnchorSideTop.Control = cmbFilterFields
     AnchorSideTop.Side = asrCenter
-    Left = 48
+    Left = 24
     Height = 19
     Top = 402
-    Width = 80
-    Caption = 'Filter active'
+    Width = 139
+    Caption = 'Filter by event OnFilter'
     OnChange = cbFilterChange
     TabOrder = 5
   end
@@ -186,7 +186,7 @@ object Form1: TForm1
   object btnSetBookmark: TButton
     Left = 24
     Height = 25
-    Top = 456
+    Top = 480
     Width = 99
     AutoSize = True
     Caption = 'Set bookmark'
@@ -197,7 +197,7 @@ object Form1: TForm1
     AnchorSideTop.Control = btnSetBookmark
     Left = 136
     Height = 25
-    Top = 456
+    Top = 480
     Width = 112
     AutoSize = True
     Caption = 'Go to Bookmark'
@@ -255,6 +255,23 @@ object Form1: TForm1
     Style = csDropDownList
     TabOrder = 17
     Text = '='
+  end
+  object CheckBox1: TCheckBox
+    Left = 24
+    Height = 19
+    Top = 431
+    Width = 139
+    Caption = 'Filter by Filter property'
+    OnChange = CheckBox1Change
+    TabOrder = 18
+  end
+  object edFilterText: TEdit
+    Left = 190
+    Height = 23
+    Top = 432
+    Width = 236
+    TabOrder = 19
+    Text = 'StringCol3 = "abc"'
   end
   object DataSource1: TDataSource
     Left = 224

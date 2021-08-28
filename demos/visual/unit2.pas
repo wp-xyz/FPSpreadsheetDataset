@@ -20,6 +20,7 @@ type
     btnGoToBookmark: TButton;
     Button2: TButton;
     cbFilter: TCheckBox;
+    CheckBox1: TCheckBox;
     cmbFields: TComboBox;
     cmbFilterFields: TComboBox;
     cmbFilterOp: TComboBox;
@@ -31,6 +32,7 @@ type
     DBEdit4: TDBEdit;
     DBGrid1: TDBGrid;
     DBNavigator1: TDBNavigator;
+    edFilterText: TEdit;
     edKeyValue: TEdit;
     edFilterValue: TEdit;
     Label1: TLabel;
@@ -41,6 +43,7 @@ type
     procedure btnSetBookmarkClick(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure cbFilterChange(Sender: TObject);
+    procedure CheckBox1Change(Sender: TObject);
     procedure cmbFilterFieldsChange(Sender: TObject);
     procedure cmbFilterOpChange(Sender: TObject);
     procedure edFilterValueChange(Sender: TObject);
@@ -175,6 +178,16 @@ begin
   ExecFilter;
 end;
 
+procedure TForm1.CheckBox1Change(Sender: TObject);
+begin
+  FDataset.Filtered := false;
+  if Checkbox1.Checked then
+  begin
+    FDataset.Filter := edFilterText.Text;
+    FDataset.Filtered := true;
+  end;
+end;
+
 procedure TForm1.ExecFilter;
 var
   field: TField;
@@ -196,7 +209,6 @@ begin
   else
     FDataset.OnFilterRecord := nil;
   FDataset.Filtered := cbFilter.Checked;
-  //FDataset.Refresh;
 end;
 
 procedure TForm1.cmbFilterFieldsChange(Sender: TObject);

@@ -16,26 +16,33 @@
 
   Much of the code is adapted from TMemDataset.
 
-  Current status (Aug 27, 2021):
+  Current status (Aug 28, 2021):
+
+  Working
   * Field defs: determined automatically from file
   * Field defs defined by user: working (requires AutoFieldDefs = false)
   * Fields: working
   * Field types: ftFloat, ftInteger, ftDateTime, ftDate, ftTime, ftString, ftBoolean
-  * Calculated fields: in code, but not tested, yet.
-  * Persistent fields: to be done
   * Locate: working
   * Lookup: working
-  * Edit, Delete, Insert: working, Post and Cancel ok
+  * Edit, Delete, Insert: working, Post and Cancel ok, Append working like Insert.
   * NULL fields: working
   * GetBookmark, GotoBookmark: working
-  * Filter: only by OnFilter event, working.
+  * Filtering by OnFilter event and by Filter property, working.
 
+  Planned but not yet working
+  * Calculated fields: in code, but not yet tested.
+  * Persistent fields: to be done
   ' Field defs: Required, Unique etc not supported ATM.
   * Indexes: not implemented
   * Sorting: not implemented
+  * Support of dsAppend missing.
+  * Support of field type ftCurrency and other integer types.
 
   Issues
-  * Bookmark moves up by 1 when a record is inserted before bookmark
+  * Bookmark moves down by 1 record when a record is inserted before bookmark
+  * Bookmark moves up by 1 record when a record is deleted before bookmark
+    (This is because the bookmark essentially is the row number).
 -------------------------------------------------------------------------------}
 
 unit fpsDataset;
@@ -45,7 +52,7 @@ unit fpsDataset;
 interface
 
 uses
-  Classes, SysUtils, DB,
+  Classes, SysUtils, DB, BufDataset_Parser,
   fpSpreadsheet, fpsTypes, fpsUtils;
 
 type
@@ -94,6 +101,7 @@ type
     FTableCreated: boolean;
     FAutoFieldDefs: Boolean;
     FIsOpen: boolean;
+    FParser: TBufDatasetParser;
   private
     function FixFieldName(const AText: String): String;
     function GetActiveBuffer(out Buffer: TRecordBuffer): Boolean;
@@ -134,6 +142,7 @@ type
     procedure SetBookmarkData(Buffer: TRecordBuffer; Data: Pointer); override;
     procedure SetBookmarkFlag(Buffer: TRecordBuffer; Value: TBookmarkFlag); override;
     procedure SetFiltered(Value: Boolean); override;
+    procedure SetFilterText(const Value: String); override;
     procedure SetRecNo(Value: Integer); override;
     // new methods
     procedure CalcFieldOffsets;
@@ -145,7 +154,7 @@ type
     procedure LoadRecordToBuffer(Buffer: TRecordBuffer; ARecNo: Integer);
     function LocateRecord(const KeyFields: string; const KeyValues: Variant;
       Options: TLocateOptions; out ARecNo: integer): Boolean;
-    procedure SetFilterText(const {%H-}AValue: String); override;
+    procedure ParseFilter(const AFilter: STring);
     procedure WriteBufferToWorksheet(Buffer: TRecordBuffer);
   public
     constructor Create(AOwner: TComponent); override;
@@ -161,7 +170,7 @@ type
     function Lookup(const Keyfields: String; const KeyValues: Variant;
       const ResultFields: String): Variant; override;
     procedure SetFieldData(Field: TField; Buffer: Pointer); override;
-    property Filter; unimplemented;  // Use OnFilter instead
+    property Filter; //unimplemented;  // Use OnFilter instead
     property Modified: boolean read FModified;
 
   // This section is to be removed after debugging.
@@ -528,17 +537,28 @@ begin
   Result := TsFieldDefs;
 end;
 
+{ Is called during filtering and returns true when the record who's buffer is
+  specified as parameter passes the filter criterions.
+  These are determined by the OnFilterRecord event and/or by the Filter property.
+
+  Based on TMemDataset and TBufDataset. }
 function TsWorksheetDataset.FilterRecord(Buffer: TRecordBuffer): Boolean;
 var
   SaveState: TDatasetState;
 begin
   Result := True;
-  if not Assigned(OnFilterRecord) then
-    Exit;
+
   SaveState := SetTempState(dsFilter);
   try
     FFilterBuffer := Buffer;
-    OnFilterRecord(Self, Result);
+
+    // Check user filter
+    if Assigned(OnFilterRecord) then
+      OnFilterRecord(Self, Result);
+
+    // Check filter text
+    if Result and (Length(Filter) > 0) then
+      Result := Boolean(FParser.ExtractFromBuffer(FFilterBuffer)^);
   finally
     RestoreState(SaveState);
   end;
@@ -813,6 +833,7 @@ begin
     FModified := false;
   end;
   FreeWorkbook;
+  FreeAndNil(FParser);
 
   if DefaultFields then
     DestroyFields;
@@ -1171,6 +1192,26 @@ begin
     Result := Null;
 end;
 
+// from TBufDataset
+procedure TsWorksheetDataset.ParseFilter(const AFilter: string);
+begin
+  // parser created?
+  if Length(AFilter) > 0 then
+  begin
+    if (FParser = nil) and IsCursorOpen then
+      FParser := TBufDatasetParser.Create(Self);
+    // is there a parser now?
+    if FParser <> nil then
+    begin
+      // set options
+      FParser.PartialMatch := not (foNoPartialCompare in FilterOptions);
+      FParser.CaseInsensitive := foCaseInsensitive in FilterOptions;
+      // parse expression
+      FParser.ParseExpression(AFilter);
+    end;
+  end;
+end;
+
 procedure TsWorksheetDataset.SetBookmarkData(Buffer: TRecordBuffer; Data: Pointer);
 begin
   if Data <> nil then
@@ -1244,19 +1285,34 @@ begin
     DataEvent(deFieldChange, PtrInt(Field));
 end;
 
+// From TBufDataset
 procedure TsWorksheetDataset.SetFiltered(Value: Boolean);
-var
-  changed: Boolean;
 begin
-  changed := Value <> inherited Filtered;
+  if Value = Filtered then
+    exit;
+
+  // Pass on to ancestor
   inherited;
-  if changed then
-    Refresh;
+
+  // Only refresh if active
+  if IsCursorOpen then
+    Resync([]);
 end;
 
-procedure TsWorksheetDataset.SetFilterText(const AValue: string);
+// From TBufDataset
+procedure TsWorksheetDataset.SetFilterText(const Value: string);
 begin
-  // Just do nothing; filter is not implemented
+  if Value = Filter then
+    exit;
+
+  // Parse
+  ParseFilter(Value);
+
+  // Call dataset method
+  inherited;
+
+  // Refilter dataset if filtered
+  if IsCursorOpen and Filtered then Resync([]);
 end;
 
 procedure TsWorksheetDataset.SetRecNo(Value: Integer);
