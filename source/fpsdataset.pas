@@ -23,7 +23,8 @@
   * Field defs defined by user: working (requires AutoFieldDefs = false)
   * Fields: working
   * Field types: ftFloat, ftInteger, ftAutoInc, ftByte, ftSmallInt, ftWord, ftLargeInt,
-    ftCurrency, ftDateTime, ftDate, ftTime, ftString, ftFixedChar, ftBoolean
+    ftCurrency, ftDateTime, ftDate, ftTime, ftString, ftFixedChar, ftBoolean,
+    ftWideString, ftFixedWideString
   * Locate: working
   * Lookup: working
   * Edit, Delete, Insert: working, Post and Cancel ok, Append working like Insert.
@@ -39,7 +40,6 @@
   * Sorting: not implemented
   * Support of dsAppend missing.
   * Support BLOBs (ftMemo)
-  * Support of other types: ftWidestring
 
   Issues
   ...
@@ -332,6 +332,8 @@ begin
     case FieldDefs[i-1].DataType of
       ftString, ftFixedChar:
         fs := FieldDefs[i-1].Size + 1;  // +1 for zero termination
+      ftWideString, ftFixedWideChar:
+        fs := FieldDefs[i-1].Size*2 + 2;
       ftInteger, ftAutoInc:
         fs := SizeOf(Integer);
       {$IF FPC_FullVersion >= 30202}
@@ -1080,6 +1082,7 @@ var
   col: TColIndex;
   cell: PCell;
   s: String;
+  ws: WideString;
   {%H-}i: Integer;
   {%H-}si: SmallInt;
   {%H-}b: Byte;
@@ -1103,8 +1106,19 @@ begin
     case cell^.ContentType of
       cctUTF8String:
         begin
-          s := FWorksheet.ReadAsText(cell) + #0;
-          Move(s[1], Buffer^, Length(s));
+          s := FWorksheet.ReadAsText(cell);
+          if s = '' then
+            SetFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo)
+          else
+          if field.DataType in [ftWideString, ftFixedWideChar] then
+          begin
+            ws := UTF8Decode(s) + #0#0;
+            Move(ws[1], Buffer^, Length(ws)*2);
+          end else
+          begin
+            s := s + #0;
+            Move(s[1], Buffer^, Length(s));
+          end;
         end;
       cctNumber:
         case field.DataType of
@@ -1379,6 +1393,8 @@ begin
         fsize := Field.DataSize;
         if Field.DataType in [ftString, ftFixedChar] then
           dec(fSize);  // Do not move terminating 0 which is included in DataSize
+        if Field.DataType in [ftWideString, ftFixedWideChar] then
+          dec(fSize, 2);
         Move(Buffer^, destBuffer^, fsize);
       end;
     end;
@@ -1441,6 +1457,7 @@ var
   cell: PCell;
   field: TField;
   P: Pointer;
+  ws: WideString;
 begin
   row := GetCurrentRowIndex;
   P := Buffer;
@@ -1483,6 +1500,12 @@ begin
           FWorksheet.WriteBoolValue(cell, PWordBool(P)^);
         ftString, ftFixedChar:
           FWorksheet.WriteText(cell, StrPas(PChar(P)));
+        ftWideString, ftFixedWideChar:
+          begin
+            Setlength(ws, StrLen(PWideChar(P)));
+            Move(P^, ws[1], Length(ws)*2);
+            FWorksheet.WriteText(cell, UTF8Encode(ws));
+          end;
         else
           ;
       end;

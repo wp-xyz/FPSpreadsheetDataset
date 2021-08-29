@@ -94,6 +94,7 @@ begin
   //FDataset.FieldDefs.Add('WordCol', ftWord);
   FDataset.FieldDefs.Add('StringCol3', ftString, 3);
   FDataset.FieldDefs.Add('StringCol5', ftString, 5);
+  FDataset.FieldDefs.Add('WideStrCol', ftWideString, 10);
 //  FDataset.FieldDefs.Add('MemoCol', ftMemo);
   FDataset.FieldDefs.Add('FloatCol', ftFloat);
   FDataset.FieldDefs.Add('DateCol', ftDate);
