@@ -38,7 +38,8 @@
   * Indexes: not implemented
   * Sorting: not implemented
   * Support of dsAppend missing.
-  * Support of other integer types: ftWidestring, ftMemo
+  * Support BLOBs (ftMemo)
+  * Support of other types: ftWidestring
 
   Issues
   ...
