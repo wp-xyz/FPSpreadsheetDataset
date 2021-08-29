@@ -332,8 +332,10 @@ begin
         fs := FieldDefs[i-1].Size + 1;  // +1 for zero termination
       ftInteger, ftAutoInc:
         fs := SizeOf(Integer);
+      {$IF FPC_FullVersion >= 30202}
       ftByte:
         fs := SizeOf(Byte);
+      {$IFEND}
       ftSmallInt:
         fs := SizeOf(SmallInt);
       ftWord:
@@ -1085,11 +1087,13 @@ begin
                 if field.DataType = ftAutoInc then
                   FAutoIncField := TAutoIncField(field);
               end;
+            {$IF FPC_FullVersion >= 30202}
             ftByte:
               begin
                 b := byte(round(cell^.NumberValue));
                 Move(b, Buffer^, SizeOf(b));
               end;
+            {$IFEND}
             ftSmallInt:
               begin
                 si := SmallInt(round(cell^.NumberValue));
@@ -1423,8 +1427,10 @@ begin
           FWorksheet.WriteCurrency(cell, PDouble(P)^, nfCurrency, 2);
         ftInteger, ftAutoInc:
           FWorksheet.WriteNumber(cell, PInteger(P)^);
+        {$IF FPC_FullVersion >= 30202}
         ftByte:
           FWorksheet.WriteNumber(cell, PByte(P)^);
+        {$IFEND}
         ftSmallInt:
           FWorksheet.WriteNumber(cell, PSmallInt(P)^);
         ftWord:
