@@ -1156,11 +1156,13 @@ begin
           // string fields
           if field.DataType in [ftString, ftFixedChar] then
           begin
+            {$IF FPC_FullVersion >= 30200}
             if TStringField(field).CodePage=CP_UTF8 then
             begin
               s1 := field.AsUTF8String;
               s2 := UTF8Encode(VarToUnicodeStr(AKeyValues[i]));
             end else
+            {$IFEND}
             begin
               s1 := field.AsString;
               s2 := VarToStr(AKeyValues[i]);
