@@ -62,7 +62,7 @@ object Form1: TForm1
   end
   object DBGrid1: TDBGrid
     Left = 448
-    Height = 536
+    Height = 392
     Top = 8
     Width = 897
     Anchors = [akTop, akLeft, akRight, akBottom]
@@ -272,6 +272,15 @@ object Form1: TForm1
     Width = 236
     TabOrder = 19
     Text = 'StringCol3 = "abc"'
+  end
+  object DBMemo1: TDBMemo
+    Left = 448
+    Height = 136
+    Top = 407
+    Width = 897
+    Anchors = [akLeft]
+    DataSource = DataSource1
+    TabOrder = 20
   end
   object DataSource1: TDataSource
     Left = 224

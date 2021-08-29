@@ -22,7 +22,7 @@
   * Field defs: determined automatically from file
   * Field defs defined by user: working (requires AutoFieldDefs = false)
   * Fields: working
-  * Field types: ftFloat, ftInteger, ftAutoInc, ftByte, ftSmallInt, ftWord,
+  * Field types: ftFloat, ftInteger, ftAutoInc, ftByte, ftSmallInt, ftWord, ftLargeInt,
     ftCurrency, ftDateTime, ftDate, ftTime, ftString, ftFixedChar, ftBoolean
   * Locate: working
   * Lookup: working
@@ -154,7 +154,7 @@ type
     function FilterRecord(Buffer: TRecordBuffer): Boolean;
     procedure FreeWorkbook;
     function GetDataSize: Integer;
-    procedure LoadRecordToBuffer(Buffer: TRecordBuffer; ARecNo: Integer);
+    procedure LoadWorksheetToBuffer(Buffer: TRecordBuffer; ARecNo: Integer);
     function LocateRecord(const KeyFields: string; const KeyValues: Variant;
       Options: TLocateOptions; out ARecNo: integer): Boolean;
     procedure ParseFilter(const AFilter: STring);
@@ -340,6 +340,8 @@ begin
         fs := SizeOf(SmallInt);
       ftWord:
         fs := SizeOf(Word);
+      ftLargeInt:
+        fs := Sizeof(LargeInt);
       ftFloat, ftCurrency:
         fs := SizeOf(Double);
       ftDateTime, ftDate, ftTime:
@@ -809,7 +811,7 @@ begin
     // Load the data
     if Result = grOK then
     begin
-      LoadRecordToBuffer(Buffer, FRecNo);
+      LoadWorksheetToBuffer(Buffer, FRecNo);
       with GetRecordInfoPtr(Buffer)^ do
       begin
         Bookmark := FRecNo;
@@ -1041,7 +1043,8 @@ end;
 
 // Reads the cells data of the current worksheet row
 // and copies them to the buffer.
-procedure TsWorksheetDataset.LoadRecordToBuffer(Buffer: TRecordBuffer; ARecNo: Integer);
+procedure TsWorksheetDataset.LoadWorksheetToBuffer(Buffer: TRecordBuffer;
+  ARecNo: Integer);
 var
   field: TField;
   row: TRowIndex;
@@ -1052,6 +1055,7 @@ var
   {%H-}si: SmallInt;
   {%H-}b: Byte;
   {%H-}w: word;
+  {%H-}li: LargeInt;
   {%H-}wb: WordBool;
   bufferStart: TRecordBuffer;
 begin
@@ -1103,6 +1107,11 @@ begin
               begin
                 w := word(round(cell^.NumberValue));
                 Move(w, Buffer^, SizeOf(w));
+              end;
+            ftLargeInt:
+              begin
+                li := LargeInt(round(cell^.NumberValue));
+                Move(li, Buffer^, SizeOf(li));
               end;
             ftString, ftFixedChar:
               begin
@@ -1192,7 +1201,7 @@ begin
       ARecNo := 0;
       while ARecNo < RecordCount do
       begin
-        LoadRecordToBuffer(FFilterBuffer, ARecNo);
+        LoadWorksheetToBuffer(FFilterBuffer, ARecNo);
         if Filtered then
           Result := FilterRecord(FFilterBuffer)
         else
@@ -1435,6 +1444,8 @@ begin
           FWorksheet.WriteNumber(cell, PSmallInt(P)^);
         ftWord:
           FWorksheet.WriteNumber(cell, PWord(P)^);
+        ftLargeInt:
+          FWorksheet.WriteNumber(cell, PLargeInt(P)^);
         ftDateTime:
           FWorksheet.WriteDateTime(cell, PDateTime(P)^, nfShortDateTime);
         ftDate:

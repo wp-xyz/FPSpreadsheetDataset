@@ -5,8 +5,9 @@ unit unit2;
 interface
 
 uses
-  Classes, SysUtils, DB, Forms, Controls, Graphics, Dialogs, DBCtrls, StdCtrls,
-  DBGrids, ExtCtrls, fpsDataset, xlsxOOXML;
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls,
+  DB, DBCtrls, DBGrids,
+  fpsDataset, xlsxOOXML;
 
 type
 
@@ -31,6 +32,7 @@ type
     DBEdit3: TDBEdit;
     DBEdit4: TDBEdit;
     DBGrid1: TDBGrid;
+    DBMemo1: TDBMemo;
     DBNavigator1: TDBNavigator;
     edFilterText: TEdit;
     edKeyValue: TEdit;
@@ -75,6 +77,48 @@ const
   DATA_FILE = '../TestData.xlsx';
 
 { TForm1 }
+
+procedure TForm1.FormCreate(Sender: TObject);
+var
+  i: Integer;
+begin
+  FDataset := TsWorksheetDataset.Create(self);
+  FDataset.Filename := DATA_FILE;
+  FDataset.SheetName := 'Sheet';
+  FDataset.AfterScroll := @AfterScrollHandler;
+
+  FDataset.AutoFieldDefs := false;
+  FDataset.FieldDefs.Add('AutoIncCol', ftAutoInc);
+  FDataset.FieldDefs.Add('IntCol', ftInteger);
+  FDataset.FieldDefs.Add('SmallIntCol', ftSmallInt);
+  FDataset.FieldDefs.Add('WordCol', ftWord);
+  FDataset.FieldDefs.Add('StringCol3', ftString, 3);
+  FDataset.FieldDefs.Add('StringCol5', ftString, 5);
+//  FDataset.FieldDefs.Add('MemoCol', ftMemo);
+  FDataset.FieldDefs.Add('FloatCol', ftFloat);
+  FDataset.FieldDefs.Add('DateCol', ftDate);
+  FDataset.FieldDefs.Add('BoolCol', ftBoolean);
+  FDataset.FieldDefs.Add('CurrencyCol', ftCurrency);
+  for i := 0 to FDataset.FieldDefs.Count-1 do
+    TsFieldDef(FDataset.FieldDefs[i]).Column := i;
+
+  FDataset.Open;
+  DataSource1.Dataset := FDataset;
+
+  DBEdit1.Datafield := 'IntCol';
+  DBEdit2.DataField := 'StringCol3';
+  DBEdit3.Datafield := 'StringCol5';
+  DBEdit4.DataField := 'DateCol';
+  DBCheckbox1.DataField := 'BoolCol';
+//  DBMemo1.Datafield := 'MemoCol';
+  (FDataset.FieldByName('FloatCol') as TFloatField).DisplayFormat := '0.000';
+
+  FDataset.GetFieldNames(cmbFields.Items);
+  FDataset.GetFieldNames(cmbFilterFields.Items);
+  cmbFields.ItemIndex := 0;
+  cmbFilterFields.ItemIndex := 0;
+
+end;
 
 procedure TForm1.AfterScrollHandler(Dataset: TDataset);
 begin
@@ -136,46 +180,6 @@ begin
     '<': Accept := (field.AsFloat < value) and not SameValue(field.AsFloat, value);
     '>': Accept := (field.AsFloat > value) and not SameValue(field.AsFloat, value);
   end;
-end;
-
-procedure TForm1.FormCreate(Sender: TObject);
-var
-  i: Integer;
-begin
-  FDataset := TsWorksheetDataset.Create(self);
-  FDataset.Filename := DATA_FILE;
-  FDataset.SheetName := 'Sheet';
-  FDataset.AfterScroll := @AfterScrollHandler;
-
-  FDataset.AutoFieldDefs := false;
-  FDataset.FieldDefs.Add('AutoIncCol', ftAutoInc);
-  FDataset.FieldDefs.Add('IntCol', ftInteger);
-  FDataset.FieldDefs.Add('SmallIntCol', ftSmallInt);
-  FDataset.FieldDefs.Add('WordCol', ftWord);
-  FDataset.FieldDefs.Add('StringCol3', ftString, 3);
-  FDataset.FieldDefs.Add('StringCol5', ftString, 5);
-  FDataset.FieldDefs.Add('FloatCol', ftFloat);
-  FDataset.FieldDefs.Add('DateCol', ftDate);
-  FDataset.FieldDefs.Add('BoolCol', ftBoolean);
-  FDataset.FieldDefs.Add('CurrencyCol', ftCurrency);
-  for i := 0 to FDataset.FieldDefs.Count-1 do
-    TsFieldDef(FDataset.FieldDefs[i]).Column := i;
-
-  FDataset.Open;
-  DataSource1.Dataset := FDataset;
-
-  DBEdit1.Datafield := 'IntCol';
-  DBEdit2.DataField := 'StringCol3';
-  DBEdit3.Datafield := 'StringCol5';
-  DBEdit4.DataField := 'DateCol';
-  DBCheckbox1.DataField := 'BoolCol';
-  (FDataset.FieldByName('FloatCol') as TFloatField).DisplayFormat := '0.000';
-
-  FDataset.GetFieldNames(cmbFields.Items);
-  FDataset.GetFieldNames(cmbFilterFields.Items);
-  cmbFields.ItemIndex := 0;
-  cmbFilterFields.ItemIndex := 0;
-
 end;
 
 procedure TForm1.cbFilterChange(Sender: TObject);
