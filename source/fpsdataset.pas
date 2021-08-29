@@ -41,9 +41,7 @@
   * Support of other integer types: ftWidestring, ftMemo
 
   Issues
-  * Bookmark moves down by 1 record when a record is inserted before bookmark
-  * Bookmark moves up by 1 record when a record is deleted before bookmark
-    (This is because the bookmark essentially is the row number).
+  ...
 -------------------------------------------------------------------------------}
 
 unit fpsDataset;
@@ -59,6 +57,7 @@ uses
 type
   TRowIndex = Int64;
   TColIndex = Int64;
+  PPCell = ^PCell;
 
   { TsFieldDef }
   TsFieldDef = class(TFieldDef)
@@ -78,7 +77,7 @@ type
 
   { TsRecordInfo }
   TsRecordInfo = record
-    Bookmark: LongInt;
+    Bookmark: PCell;  // Pointer to a cell in the bookmarked row.
     BookmarkFlag: TBookmarkFlag;
   end;
   PsRecordInfo = ^TsRecordInfo;
@@ -108,6 +107,7 @@ type
   private
     function FixFieldName(const AText: String): String;
     function GetActiveBuffer(out Buffer: TRecordBuffer): Boolean;
+    function GetBookmarkCellFromRecNo(ARecNo: Integer): PCell;
     function GetCurrentRowIndex: TRowIndex;
     function GetFirstDataRowIndex: TRowIndex;
     function GetLastDataRowIndex: TRowIndex;
@@ -279,7 +279,7 @@ begin
   FRecordBufferSize := -1;
   FRecNo := -1;
   FAutoIncValue := -1;
-  BookmarkSize := SizeOf(Longint);
+  BookmarkSize := SizeOf(TRowIndex);
 end;
 
 destructor TsWorksheetDataset.Destroy;
@@ -307,15 +307,16 @@ begin
 end;
 
 { Returns whether the specified bookmark is valid, i.e. the worksheet row index
-  associated with the bookmark is between first and last data rows. }
+  associated with the bookmark cell is between first and last data rows. }
 function TsWorksheetDataset.BookmarkValid(ABookmark: TBookmark): Boolean;
 var
-  reqBookmark: Integer;
+  bookmarkCell: PCell;
 begin
   Result := False;
-  if ABookMark=nil then exit;
-  reqBookmark := PInteger(ABookmark)^;
-  Result := (reqBookmark >= 0) and (reqBookmark <= GetRecordCount);
+  if ABookMark = nil then exit;
+  bookmarkCell := PPCell(ABookmark)^;
+  Result := (bookmarkCell^.Row >= GetFirstDataRowIndex) and 
+            (bookmarkCell^.Row <= GetLastDataRowIndex);
 end;
 
 procedure TsWorksheetDataset.CalcFieldOffsets;
@@ -397,10 +398,16 @@ end;
 function TsWorksheetDataset.CompareBookmarks(Bookmark1, Bookmark2: TBookmark): Longint;
 const
   r: array[Boolean, Boolean] of ShortInt = ((2,-1),(1,0));
+var
+  cell1, cell2: PCell;
 begin
-  Result := r[Bookmark1=nil, Bookmark2=nil];
+  Result := r[Bookmark1 = nil, Bookmark2 = nil];
   if Result = 2 then
-    Result := PInteger(Bookmark1)^ - PInteger(Bookmark2)^;
+  begin
+    cell1 := PPCell(Bookmark1)^;
+    cell2 := PPCell(Bookmark2)^;
+    Result := Int64(cell1^.Row) - Int64(cell2^.Row);
+  end;
 end;
 
 { Creates a new table, i.e. a new empty worksheet based on the given FieldDefs
@@ -652,11 +659,30 @@ begin
   Result := (Buffer <> nil);
 end;
 
-// Extracts the bookmark (worksheet row index) from the specified buffer.
+{ Returns the pointer to the first cell in the row corresponding to the RecNo
+  to be used as a bookmark. }
+function TsWorksheetDataset.GetBookmarkCellFromRecNo(ARecNo: Integer): PCell;
+var
+  row: TRowIndex;
+  col: TColIndex;
+begin
+  row := GetRowIndexFromRecNo(ARecNo);
+  col := FWorksheet.GetFirstColIndex;
+  Result := FWorksheet.GetCell(row, col);
+  // Do not use FindCell here because the returned cell is referenced by the
+  // bookmark system.
+end;
+
+// Extracts the bookmark from the specified buffer.
 procedure TsWorksheetDataset.GetBookmarkData(Buffer: TRecordBuffer; Data: Pointer);
+var
+  bookmarkCell: PCell;
 begin
   if Data <> nil then
-    PInteger(Data)^ := GetRecordInfoPtr(Buffer)^.Bookmark;
+  begin
+    bookmarkCell := GetRecordInfoPtr(Buffer)^.Bookmark;
+    PPCell(Data)^ := bookmarkcell;
+  end;
 end;
 
 // Extracts the bookmark flag from the specified buffer.
@@ -814,7 +840,7 @@ begin
       LoadWorksheetToBuffer(Buffer, FRecNo);
       with GetRecordInfoPtr(Buffer)^ do
       begin
-        Bookmark := FRecNo;
+        Bookmark := GetBookmarkCellFromRecNo(FRecNo);
         BookmarkFlag := bfCurrent;
       end;
       GetCalcFields(Buffer);
@@ -916,19 +942,21 @@ begin
   FRecNo := -1;
 end;
 
-// Internally, a bookmark is the row index of the worksheet.
+{ Internally, a bookmark is a cell in a worksheet row. }
 procedure TsWorksheetDataset.InternalGotoBookmark(ABookmark: Pointer);
 var
-  reqBookmark: Integer;
+  bookmarkCell: PCell;
 begin
-  reqBookmark := PInteger(ABookmark)^;
-  if (reqBookmark >= 0) and (reqBookmark <= GetRecordCount) then
-    FRecNo := reqBookmark
+  bookmarkCell := PPCell(ABookmark)^;
+  if (bookmarkCell <> nil) and (bookmarkCell^.Row >= GetFirstDataRowIndex) and
+    (bookmarkCell^.Row <= GetLastDataRowIndex)
+  then
+    SetCurrentRow(bookmarkCell^.Row)
   else
     DatabaseError('Bookmark not found.');
 end;
 
-// Initializes the field defs.
+{ Initializes the field defs. }
 procedure TsWorksheetDataset.InternalInitFieldDefs;
 begin
   if FAutoFieldDefs and (FieldDefs.Count = 0) then
@@ -1030,10 +1058,10 @@ end;
 // bookmark.
 procedure TsWorksheetDataset.InternalSetToRecord(Buffer: TRecordBuffer);
 var
-  reqBookmark: Integer;
+  bookmarkCell: PCell;
 begin
-  reqBookmark := GetRecordInfoPtr(Buffer)^.Bookmark;
-  InternalGotoBookmark(@reqBookmark);
+  bookmarkCell := GetRecordInfoPtr(Buffer)^.Bookmark;
+  InternalGotoBookmark(@bookmarkCell);
 end;
 
 function TsWorksheetDataset.IsCursorOpen: boolean;
@@ -1066,75 +1094,73 @@ begin
   for field in Fields do
   begin
     col := ColIndexFromField(field);
-    cell := FWorksheet.FindCell(row, col);
-    if cell = nil then
-      SetFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo)
-    else
-    begin
-      ClearFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo);
-      case cell^.ContentType of
-        cctUTF8String:
-          begin
-            s := FWorksheet.ReadAsText(cell) + #0;
-            Move(s[1], Buffer^, Length(s));
-          end;
-        cctNumber:
-          case field.DataType of
-            ftFloat:
-              Move(cell^.NumberValue, Buffer^, SizeOf(cell^.NumberValue));
-            ftCurrency:
-              Move(cell^.NumberValue, Buffer^, SizeOf(cell^.Numbervalue));
-            ftInteger, ftAutoInc:
-              begin
-                i := Round(cell^.NumberValue);
-                Move(i, Buffer^, SizeOf(i));
-                if field.DataType = ftAutoInc then
-                  FAutoIncField := TAutoIncField(field);
-              end;
-            {$IF FPC_FullVersion >= 30202}
-            ftByte:
-              begin
-                b := byte(round(cell^.NumberValue));
-                Move(b, Buffer^, SizeOf(b));
-              end;
-            {$IFEND}
-            ftSmallInt:
-              begin
-                si := SmallInt(round(cell^.NumberValue));
-                Move(si, Buffer^, SizeOf(si));
-              end;
-            ftWord:
-              begin
-                w := word(round(cell^.NumberValue));
-                Move(w, Buffer^, SizeOf(w));
-              end;
-            ftLargeInt:
-              begin
-                li := LargeInt(round(cell^.NumberValue));
-                Move(li, Buffer^, SizeOf(li));
-              end;
-            ftString, ftFixedChar:
-              begin
-                s := FWorksheet.ReadAsText(cell) + #0;
-                Move(s[1], Buffer^, Length(s));
-              end;
-            else
-              ;
-          end;
-        cctDateTime:
-          // TDataset handles date/time value as TDateTimeRec but expects them
-          // to be TDateTime in the buffer. How strange!
-          Move(cell^.DateTimeValue, Buffer^, SizeOf(TDateTime));
-        cctBool:
-          begin
-            wb := cell^.BoolValue;    // Boolean field stores value as wordbool
-            Move(wb, Buffer^, SizeOf(wb));
-          end;
-        cctEmpty:
-          SetFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo);
-        else
-          ;
-      end;
+    // Find the cell at the column and row. BUT: For bookmark support, we need
+    // a cell even when there is none. So: Find the cell by calling GetCell
+    // which adds a blank cell in such a case.
+    cell := FWorksheet.GetCell(row, col);
+    ClearFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo);
+    case cell^.ContentType of
+      cctUTF8String:
+        begin
+          s := FWorksheet.ReadAsText(cell) + #0;
+          Move(s[1], Buffer^, Length(s));
+        end;
+      cctNumber:
+        case field.DataType of
+          ftFloat:
+            Move(cell^.NumberValue, Buffer^, SizeOf(cell^.NumberValue));
+          ftCurrency:
+            Move(cell^.NumberValue, Buffer^, SizeOf(cell^.Numbervalue));
+          ftInteger, ftAutoInc:
+            begin
+              i := Round(cell^.NumberValue);
+              Move(i, Buffer^, SizeOf(i));
+              if field.DataType = ftAutoInc then
+                FAutoIncField := TAutoIncField(field);
+            end;
+          {$IF FPC_FullVersion >= 30202}
+          ftByte:
+            begin
+              b := byte(round(cell^.NumberValue));
+              Move(b, Buffer^, SizeOf(b));
+            end;
+          {$IFEND}
+          ftSmallInt:
+            begin
+              si := SmallInt(round(cell^.NumberValue));
+              Move(si, Buffer^, SizeOf(si));
+            end;
+          ftWord:
+            begin
+              w := word(round(cell^.NumberValue));
+              Move(w, Buffer^, SizeOf(w));
+            end;
+          ftLargeInt:
+            begin
+              li := LargeInt(round(cell^.NumberValue));
+              Move(li, Buffer^, SizeOf(li));
+            end;
+          ftString, ftFixedChar:
+            begin
+              s := FWorksheet.ReadAsText(cell) + #0;
+              Move(s[1], Buffer^, Length(s));
+            end;
+          else
+            ;
+        end;
+      cctDateTime:
+        // TDataset handles date/time value as TDateTimeRec but expects them
+        // to be TDateTime in the buffer. How strange!
+        Move(cell^.DateTimeValue, Buffer^, SizeOf(TDateTime));
+      cctBool:
+        begin
+          wb := cell^.BoolValue;    // Boolean field stores value as wordbool
+          Move(wb, Buffer^, SizeOf(wb));
+        end;
+      cctEmpty:
+        SetFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo);
+      else
+        ;
     end;
     inc(Buffer, field.DataSize);
   end;
@@ -1297,9 +1323,9 @@ end;
 procedure TsWorksheetDataset.SetBookmarkData(Buffer: TRecordBuffer; Data: Pointer);
 begin
   if Data <> nil then
-    GetRecordInfoPtr(Buffer)^.Bookmark := PInteger(Data)^
+    GetRecordInfoPtr(Buffer)^.Bookmark := PPCell(Data)^
   else
-    GetRecordInfoPtr(Buffer)^.Bookmark := 0;
+    GetRecordInfoPtr(Buffer)^.Bookmark := nil;
 end;
 
 procedure TsWorksheetDataset.SetBookmarkFlag(Buffer: TRecordBuffer;
