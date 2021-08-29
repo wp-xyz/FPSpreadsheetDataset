@@ -22,8 +22,8 @@
   * Field defs: determined automatically from file
   * Field defs defined by user: working (requires AutoFieldDefs = false)
   * Fields: working
-  * Field types: ftFloat, ftInteger, ftSmallInt, ftWord, ftCurrency,
-    ftDateTime, ftDate, ftTime, ftString, ftFixedChar, ftBoolean
+  * Field types: ftFloat, ftInteger, ftAutoInc, ftByte, ftSmallInt, ftWord,
+    ftCurrency, ftDateTime, ftDate, ftTime, ftString, ftFixedChar, ftBoolean
   * Locate: working
   * Lookup: working
   * Edit, Delete, Insert: working, Post and Cancel ok, Append working like Insert.
@@ -103,6 +103,8 @@ type
     FAutoFieldDefs: Boolean;
     FIsOpen: boolean;
     FParser: TBufDatasetParser;
+    FAutoIncValue: Integer;
+    FAutoIncField: TAutoIncField;
   private
     function FixFieldName(const AText: String): String;
     function GetActiveBuffer(out Buffer: TRecordBuffer): Boolean;
@@ -204,7 +206,7 @@ type
 implementation
 
 uses
-  Math, Variants, fpsNumFormat;
+  Math, TypInfo, Variants, fpsNumFormat;
 
 { Null mask handling
 
@@ -276,6 +278,7 @@ begin
   FDataSize := -1;
   FRecordBufferSize := -1;
   FRecNo := -1;
+  FAutoIncValue := -1;
   BookmarkSize := SizeOf(Longint);
 end;
 
@@ -327,8 +330,10 @@ begin
     case FieldDefs[i-1].DataType of
       ftString, ftFixedChar:
         fs := FieldDefs[i-1].Size + 1;  // +1 for zero termination
-      ftInteger:
+      ftInteger, ftAutoInc:
         fs := SizeOf(Integer);
+      ftByte:
+        fs := SizeOf(Byte);
       ftSmallInt:
         fs := SizeOf(SmallInt);
       ftWord:
@@ -340,7 +345,9 @@ begin
       ftBoolean:
         fs := SizeOf(WordBool);  // boolean is expected by TBooleanField to be WordBool
       else
-        fs := 0;
+        DatabaseError(Format('Field data type %s not supported.', [
+          GetEnumName(TypeInfo(TFieldType), integer(FieldDefs[i-1].DataType))
+        ]));
     end;
     FFieldOffsets[i] := FFieldOffsets[i-1] + fs;
   end;
@@ -402,6 +409,9 @@ var
 begin
   CheckInactive;
   Clear(false);    // false = do not clear FieldDefs
+
+  if FAutoIncValue < 0 then
+    FAutoIncValue := 1;
 
   noWorkbook := (FWorkbook = nil);
   if noWorkbook then
@@ -691,13 +701,19 @@ begin
   if idx >= 0 then
   begin
     Result := not GetFieldIsNull(GetNullMaskPtr(srcBuffer), Field.FieldNo);
-    if Result and Assigned(Buffer) then
+    if not Result then
+    begin
+      if Field = FAutoIncField then
+        Move(FAutoIncValue, Buffer^, Field.DataSize);
+      exit;
+    end;
+    if Assigned(Buffer) then
     begin
       inc(srcBuffer, FFieldOffsets[idx]);
       if (Field.DataType in [ftDate, ftTime, ftDateTime]) then
       begin
-        // The srcBuffer contains date/time values as TDateTime, but
-        // TDataset expects them to be TDateTimeRec --> convert to TDateTimeRec
+        // The srcBuffer contains date/time values as TDateTime, but the
+        // field expects them to be TDateTimeRec --> convert to TDateTimeRec
         Move(srcBuffer^, dt, SizeOf(TDateTime));
         dtr := DateTimeToDateTimeRec(Field.DataType, dt);
         Move(dtr, Buffer^, SizeOf(TDateTimeRec));
@@ -863,6 +879,7 @@ begin
     FModified := false;
   end;
   FreeWorkbook;
+  if FAutoIncValue > -1 then FAUtoIncValue := 1;
   FreeAndNil(FParser);
 
   if DefaultFields then
@@ -923,6 +940,8 @@ end;
 
 // Opens the dataset: Opens the workbook, initialized field defs, creates fields
 procedure TsWorksheetDataset.InternalOpen;
+var
+  f: TField;
 begin
   FWorkbook := TsWorkbook.Create;
   try
@@ -954,6 +973,17 @@ begin
     GetDataSize;
     GetRecordSize;
     FRecNo := -1;
+
+    // Search for autoinc field
+    FAutoIncField := nil;
+    FAutoIncValue := -1;
+    for f in Fields do
+      if f is TAutoIncField then
+      begin
+        FAutoIncField := TAutoIncField(f);
+        FAutoIncValue := round(FWorksheet.ReadAsNumber(FLastRow, ColIndexFromField(f))) + 1;
+        break;
+      end;
     FModified := false;
 
     FIsOpen := true;
@@ -975,7 +1005,14 @@ begin
   if (State=dsEdit) then
     WriteBufferToWorksheet(ActiveBuffer)
   else
+  begin
+    if Assigned(FAutoIncField) then
+    begin
+      FAutoIncField.AsInteger := FAutoIncValue;
+      inc(FAutoIncValue);
+    end;
     InternalAddRecord(ActiveBuffer, True);
+  end;
 end;
 
 // Reinitializes a buffer which has been allocated previously -> zero out everything
@@ -1011,8 +1048,9 @@ var
   s: String;
   {%H-}i: Integer;
   {%H-}si: SmallInt;
+  {%H-}b: Byte;
   {%H-}w: word;
-  {%H-}b: WordBool;
+  {%H-}wb: WordBool;
   bufferStart: TRecordBuffer;
 begin
   bufferStart := Buffer;
@@ -1040,19 +1078,26 @@ begin
               Move(cell^.NumberValue, Buffer^, SizeOf(cell^.NumberValue));
             ftCurrency:
               Move(cell^.NumberValue, Buffer^, SizeOf(cell^.Numbervalue));
-            ftInteger:
+            ftInteger, ftAutoInc:
               begin
                 i := Round(cell^.NumberValue);
                 Move(i, Buffer^, SizeOf(i));
+                if field.DataType = ftAutoInc then
+                  FAutoIncField := TAutoIncField(field);
+              end;
+            ftByte:
+              begin
+                b := byte(round(cell^.NumberValue));
+                Move(b, Buffer^, SizeOf(b));
               end;
             ftSmallInt:
               begin
-                si := round(cell^.NumberValue);
+                si := SmallInt(round(cell^.NumberValue));
                 Move(si, Buffer^, SizeOf(si));
               end;
             ftWord:
               begin
-                w := round(cell^.NumberValue);
+                w := word(round(cell^.NumberValue));
                 Move(w, Buffer^, SizeOf(w));
               end;
             ftString, ftFixedChar:
@@ -1069,8 +1114,8 @@ begin
           Move(cell^.DateTimeValue, Buffer^, SizeOf(TDateTime));
         cctBool:
           begin
-            b := cell^.BoolValue;    // Boolean field stores value as wordbool
-            Move(b, Buffer^, SizeOf(b));
+            wb := cell^.BoolValue;    // Boolean field stores value as wordbool
+            Move(wb, Buffer^, SizeOf(wb));
           end;
         cctEmpty:
           SetFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo);
@@ -1376,8 +1421,10 @@ begin
             FWorksheet.WriteNumber(cell, PDouble(P)^, nfFixed, TFloatField(field).Precision);
         ftCurrency:
           FWorksheet.WriteCurrency(cell, PDouble(P)^, nfCurrency, 2);
-        ftInteger:
+        ftInteger, ftAutoInc:
           FWorksheet.WriteNumber(cell, PInteger(P)^);
+        ftByte:
+          FWorksheet.WriteNumber(cell, PByte(P)^);
         ftSmallInt:
           FWorksheet.WriteNumber(cell, PSmallInt(P)^);
         ftWord:

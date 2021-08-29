@@ -147,8 +147,8 @@ begin
   FDataset.SheetName := 'Sheet';
   FDataset.AfterScroll := @AfterScrollHandler;
 
-  {
   FDataset.AutoFieldDefs := false;
+  FDataset.FieldDefs.Add('AutoIncCol', ftAutoInc);
   FDataset.FieldDefs.Add('IntCol', ftInteger);
   FDataset.FieldDefs.Add('SmallIntCol', ftSmallInt);
   FDataset.FieldDefs.Add('WordCol', ftWord);
@@ -158,7 +158,6 @@ begin
   FDataset.FieldDefs.Add('DateCol', ftDate);
   FDataset.FieldDefs.Add('BoolCol', ftBoolean);
   FDataset.FieldDefs.Add('CurrencyCol', ftCurrency);
-  }
   for i := 0 to FDataset.FieldDefs.Count-1 do
     TsFieldDef(FDataset.FieldDefs[i]).Column := i;
 
@@ -171,6 +170,7 @@ begin
   DBEdit4.DataField := 'DateCol';
   DBCheckbox1.DataField := 'BoolCol';
   (FDataset.FieldByName('FloatCol') as TFloatField).DisplayFormat := '0.000';
+
   FDataset.GetFieldNames(cmbFields.Items);
   FDataset.GetFieldNames(cmbFilterFields.Items);
   cmbFields.ItemIndex := 0;
