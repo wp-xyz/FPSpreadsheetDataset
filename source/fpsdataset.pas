@@ -27,7 +27,7 @@
     ftWideString, ftFixedWideString
   * Locate: working
   * Lookup: working
-  * Edit, Delete, Insert: working, Post and Cancel ok, Append working like Insert.
+  * Edit, Delete, Insert, Append: working, Post and Cancel ok
   * NULL fields: working
   * GetBookmark, GotoBookmark: working
   * Filtering by OnFilter event and by Filter property, working.
@@ -38,7 +38,6 @@
   ' Field defs: Required, Unique etc not supported ATM.
   * Indexes: not implemented
   * Sorting: not implemented
-  * Support of dsAppend missing.
   * Support BLOBs (ftMemo)
 
   Issues
@@ -890,19 +889,23 @@ begin
   Result := GetFirstDataRowIndex + ARecNo;
 end;
 
+{ Called internally when a record is added. }
 procedure TsWorksheetDataset.InternalAddRecord(Buffer: Pointer; DoAppend: Boolean);
 var
   row: TRowIndex;
 begin
-  row := GetRowIndexFromRecNo(FRecNo);
-  FWorksheet.InsertRow(row);
   inc(FLastRow);
-  Inc(FRecordCount);
+  inc(FRecordCount);
+  if DoAppend then
+    row := FLastRow
+  else
+    row := GetRowIndexFromRecNo(FRecNo);
+  FWorksheet.InsertRow(row);
   WriteBufferToWorksheet(Buffer);
   FModified := true;
 end;
 
-// Closes the dataset
+{ Closes the dataset }
 procedure TsWorksheetDataset.InternalClose;
 begin
   FIsOpen := false;
@@ -922,6 +925,8 @@ begin
   FRecNo := -1;
 end;
 
+{ Called internally when a record is deleted.
+  Must delete the row from the worksheet. }
 procedure TsWorksheetDataset.InternalDelete;
 var
   row: TRowIndex;
@@ -939,7 +944,7 @@ begin
   FModified := true;
 end;
 
-// Moves the cursor to the first record, the first data row in the worksheet
+{ Moves the cursor to the first record, i.e. the first data row in the worksheet.}
 procedure TsWorksheetDataset.InternalFirst;
 begin
   FRecNo := -1;
@@ -967,13 +972,13 @@ begin
   CalcFieldOffsets;
 end;
 
-// Moves the cursor to the last record, the last data row of the worksheet
+{ Moves the cursor to the last record, the last data row of the worksheet }
 procedure TsWorksheetDataset.InternalLast;
 begin
   FRecNo := RecordCount;
 end;
 
-// Opens the dataset: Opens the workbook, initialized field defs, creates fields
+{ Opens the dataset: Opens the workbook, initializes field defs, creates fields }
 procedure TsWorksheetDataset.InternalOpen;
 var
   f: TField;
@@ -1031,6 +1036,7 @@ begin
   end;
 end;
 
+{ Called inernally when a record is posted. }
 procedure TsWorksheetDataset.InternalPost;
 begin
   CheckActive;
@@ -1050,15 +1056,16 @@ begin
   end;
 end;
 
-// Reinitializes a buffer which has been allocated previously -> zero out everything
+{ Reinitializes a buffer which has been allocated previously
+  -> zero out everything
+  In this step the NullMask is erased, and this means that all fields are null. }
 procedure TsWorksheetDataset.InternalInitRecord(Buffer: TRecordBuffer);
 begin
   FillChar(Buffer^, FRecordBufferSize, 0);
 end;
 
-// Sets the database cursor to the record specified by the given buffer.
-// We extract here the bookmark associated with the buffer and go to this
-// bookmark.
+{ Sets the database cursor to the record specified by the given buffer. We
+  extract here the bookmark associated with the buffer and go to this bookmark. }
 procedure TsWorksheetDataset.InternalSetToRecord(Buffer: TRecordBuffer);
 var
   bookmarkCell: PCell;
@@ -1072,8 +1079,8 @@ begin
   Result := FIsOpen;
 end;
 
-// Reads the cells data of the current worksheet row
-// and copies them to the buffer.
+{ Reads the cells data of the current worksheet row and
+  copies them to the buffer. }
 procedure TsWorksheetDataset.LoadWorksheetToBuffer(Buffer: TRecordBuffer;
   ARecNo: Integer);
 var
@@ -1090,6 +1097,7 @@ var
   {%H-}li: LargeInt;
   {%H-}wb: WordBool;
   nullMask: Pointer;
+  maxLen: Integer;
 begin
   nullMask := GetNullMaskPtr(Buffer);
   row := GetRowIndexFromRecNo(ARecNo);
@@ -1104,7 +1112,8 @@ begin
     case cell^.ContentType of
       cctUTF8String:
         begin
-          s := UTF8LeftStr(FWorksheet.ReadAsText(cell), field.FieldDef.Size div field.FieldDef.CharSize);
+          maxLen := field.FieldDef.Size div field.FieldDef.CharSize;
+          s := UTF8LeftStr(FWorksheet.ReadAsText(cell), maxLen);
           if s = '' then
             SetFieldIsNull(nullMask, field.FieldNo)
           else

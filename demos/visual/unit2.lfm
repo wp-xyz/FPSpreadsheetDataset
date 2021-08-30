@@ -164,11 +164,12 @@ object Form1: TForm1
     TabOrder = 11
   end
   object Button2: TButton
-    Left = 317
+    Left = 288
     Height = 25
-    Top = 224
-    Width = 75
-    Caption = 'Button2'
+    Top = 222
+    Width = 146
+    AutoSize = True
+    Caption = 'Read Fields[0].AsString'
     OnClick = Button2Click
     TabOrder = 12
   end
@@ -281,6 +282,16 @@ object Form1: TForm1
     Anchors = [akLeft]
     DataSource = DataSource1
     TabOrder = 20
+  end
+  object btnAppend: TButton
+    Left = 288
+    Height = 25
+    Top = 184
+    Width = 68
+    AutoSize = True
+    Caption = 'Append'
+    OnClick = btnAppendClick
+    TabOrder = 21
   end
   object DataSource1: TDataSource
     Left = 224

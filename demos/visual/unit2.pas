@@ -19,6 +19,7 @@ type
     btnLookup: TButton;
     btnSetBookmark: TButton;
     btnGoToBookmark: TButton;
+    btnAppend: TButton;
     Button2: TButton;
     cbFilter: TCheckBox;
     CheckBox1: TCheckBox;
@@ -39,6 +40,7 @@ type
     edFilterValue: TEdit;
     Label1: TLabel;
     Label2: TLabel;
+    procedure btnAppendClick(Sender: TObject);
     procedure btnFindClick(Sender: TObject);
     procedure btnGoToBookmarkClick(Sender: TObject);
     procedure btnLookupClick(Sender: TObject);
@@ -243,6 +245,11 @@ begin
     ShowMessage('Found')
   else
     ShowMessage('Not found');
+end;
+
+procedure TForm1.btnAppendClick(Sender: TObject);
+begin
+  FDataset.Append;
 end;
 
 procedure TForm1.btnGoToBookmarkClick(Sender: TObject);
