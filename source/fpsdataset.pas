@@ -207,7 +207,7 @@ type
 implementation
 
 uses
-  Math, TypInfo, Variants, fpsNumFormat;
+  LazUTF8, Math, TypInfo, Variants, fpsNumFormat;
 
 { Null mask handling
 
@@ -1089,11 +1089,9 @@ var
   {%H-}w: word;
   {%H-}li: LargeInt;
   {%H-}wb: WordBool;
-  bufferStart: TRecordBuffer;
+  nullMask: Pointer;
 begin
-  bufferStart := Buffer;
-  //Q := Buffer;
-
+  nullMask := GetNullMaskPtr(Buffer);
   row := GetRowIndexFromRecNo(ARecNo);
   for field in Fields do
   begin
@@ -1102,13 +1100,13 @@ begin
     // a cell even when there is none. So: Find the cell by calling GetCell
     // which adds a blank cell in such a case.
     cell := FWorksheet.GetCell(row, col);
-    ClearFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo);
+    ClearFieldIsNull(nullMask, field.FieldNo);
     case cell^.ContentType of
       cctUTF8String:
         begin
-          s := FWorksheet.ReadAsText(cell);
+          s := UTF8LeftStr(FWorksheet.ReadAsText(cell), field.FieldDef.Size div field.FieldDef.CharSize);
           if s = '' then
-            SetFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo)
+            SetFieldIsNull(nullMask, field.FieldNo)
           else
           if field.DataType in [ftWideString, ftFixedWideChar] then
           begin
@@ -1173,7 +1171,7 @@ begin
           Move(wb, Buffer^, SizeOf(wb));
         end;
       cctEmpty:
-        SetFieldIsNull(GetNullMaskPtr(bufferStart), field.FieldNo);
+        SetFieldIsNull(nullMask, field.FieldNo);
       else
         ;
     end;
@@ -1472,7 +1470,7 @@ begin
       cell := FWorksheet.GetCell(row, col);
       case field.DataType of
         ftFloat:
-          if TFloatField(field).Precision >= 15 then
+          if (TFloatField(field).Precision >= 15) or (TFloatField(field).Precision < 0) then
             FWorksheet.WriteNumber(cell, PDouble(P)^, nfGeneral)
           else
             FWorksheet.WriteNumber(cell, PDouble(P)^, nfFixed, TFloatField(field).Precision);

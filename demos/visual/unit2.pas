@@ -74,7 +74,7 @@ uses
   Variants, Math;
 
 const
-  DATA_FILE = '../TestData.xlsx';
+  DATA_FILE = '../TestData1.xlsx';
 
 { TForm1 }
 
@@ -88,15 +88,14 @@ begin
   FDataset.AfterScroll := @AfterScrollHandler;
 
   FDataset.AutoFieldDefs := false;
-
+//  FDataset.FieldDefs.Add('MemoCol', ftMemo);
   FDataset.FieldDefs.Add('AutoIncCol', ftAutoInc);
   FDataset.FieldDefs.Add('IntCol', ftInteger);
   FDataset.FieldDefs.Add('SmallIntCol', ftSmallInt);
   FDataset.FieldDefs.Add('WordCol', ftWord);
   FDataset.FieldDefs.Add('StringCol3', ftString, 3);
   FDataset.FieldDefs.Add('StringCol5', ftString, 5);
-  FDataset.FieldDefs.Add('WideStringCol', ftWideString, 10);
-//  FDataset.FieldDefs.Add('MemoCol', ftMemo);
+  FDataset.FieldDefs.Add('WideStringCol', ftWideString, 12);
   FDataset.FieldDefs.Add('FloatCol', ftFloat);
   FDataset.FieldDefs.Add('DateCol', ftDate);
   FDataset.FieldDefs.Add('BoolCol', ftBoolean);
