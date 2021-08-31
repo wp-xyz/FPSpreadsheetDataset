@@ -24,7 +24,7 @@
   * Fields: working
   * Field types: ftFloat, ftInteger, ftAutoInc, ftByte, ftSmallInt, ftWord, ftLargeInt,
     ftCurrency, ftDateTime, ftDate, ftTime, ftString, ftFixedChar, ftBoolean,
-    ftWideString, ftFixedWideString
+    ftWideString, ftFixedWideString, ftMemo
   * Locate: working
   * Lookup: working
   * Edit, Delete, Insert, Append: working, Post and Cancel ok
@@ -38,7 +38,6 @@
   ' Field defs: Required, Unique etc not supported ATM.
   * Indexes: not implemented
   * Sorting: not implemented
-  * Support BLOBs (ftMemo)
 
   Issues
   ...
@@ -94,7 +93,7 @@ type
     FLastRow: TRowIndex;             // Worksheet index of the last record
     FRecordCount: Integer;           // Number of records between first and last data rows
     FRecordBufferSize: Integer;      // Size of the record buffer
-    FDataSize: Integer;              // Total size of the field data
+    FTotalFieldSize: Integer;        // Total size of the field data
     FFieldOffsets: array of Integer; // Offset to field start in buffer
     FModified: Boolean;              // Flag to show that workbook needs saving
     FFilterBuffer: TRecordBuffer;
@@ -148,12 +147,14 @@ type
     procedure SetFilterText(const Value: String); override;
     procedure SetRecNo(Value: Integer); override;
     // new methods
+    procedure AllocBlobPointers(Buffer: TRecordBuffer);
     procedure CalcFieldOffsets;
     function ColIndexFromField(AField: TField): TColIndex;
     procedure DetectFieldDefs;
     function FilterRecord(Buffer: TRecordBuffer): Boolean;
+    procedure FreeBlobPointers(Buffer: TRecordBuffer);
     procedure FreeWorkbook;
-    function GetDataSize: Integer;
+    function GetTotalFieldSize: Integer;
     procedure LoadWorksheetToBuffer(Buffer: TRecordBuffer; ARecNo: Integer);
     function LocateRecord(const KeyFields: string; const KeyValues: Variant;
       Options: TLocateOptions; out ARecNo: integer): Boolean;
@@ -166,6 +167,7 @@ type
     procedure Clear;
     procedure Clear(ClearDefs: Boolean);
     function CompareBookmarks(Bookmark1, Bookmark2: TBookmark): Longint; override;
+    function CreateBlobStream(Field: TField; Mode: TBlobStreamMode): TStream; override;
     procedure CreateTable;
     function GetFieldData(Field: TField; Buffer: Pointer): Boolean; override;
     function Locate(const KeyFields: String; const KeyValues: Variant;
@@ -252,7 +254,6 @@ begin
 end;
 
 
-
 { TsFieldDef }
 
 constructor TsFieldDef.Create(ACollection: TCollection);
@@ -261,12 +262,108 @@ begin
   FColumn := -1;
 end;
 
+
 { TsFieldDefs }
 
 class function TsFieldDefs.FieldDefClass: TFieldDefClass;
 begin
   Result := TsFieldDef;
 end;
+
+
+{ TsBlobData }
+
+type
+  TsBlobData = record
+    Data: TBytes;
+//    dummy: Int64;
+  end;
+  PsBlobData = ^TsBlobData;
+
+
+{ TsBlobStream }
+
+type
+  TsBlobStream = class(TMemoryStream)
+  private
+    FField: TBlobField;
+    FDataSet: TsWorksheetDataSet;
+    FMode: TBlobStreamMode;
+    FModified: Boolean;
+    procedure LoadBlobData;
+    procedure SaveBlobData;
+  public
+    constructor Create(Field: TBlobField; Mode: TBlobStreamMode);
+    destructor Destroy; override;
+    function Read(var Buffer; Count: Longint): Longint; override;
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
+constructor TsBlobStream.Create(Field: TBlobField; Mode: TBlobStreamMode);
+begin
+  inherited Create;
+  FField := Field;
+  FMode := Mode;
+  FDataset := FField.Dataset as TsWorksheetDataset;
+  if Mode <> bmWrite then
+    LoadBlobData;
+end;
+
+destructor TsBlobStream.Destroy;
+begin
+  if FModified then
+    SaveBlobData;
+  inherited Destroy;
+end;
+
+// Copies the BLOB field data from the active buffer into the stream
+procedure TsBlobStream.LoadBlobData;
+var
+  buffer: TRecordBuffer;
+begin
+  Self.Size := 0;
+  if FDataset.GetActiveBuffer(buffer) then
+  begin
+    inc(buffer, FDataset.FFieldOffsets[FField.FieldNo-1]);
+    Size := 0;
+    with PsBlobData(buffer)^ do
+      Write(Data[0], Length(Data));   // Writes the data into the stream
+    Position := 0;
+    SaveToFile('test.txt');
+  end;
+  Position := 0;
+end;
+
+function TsBlobStream.Read(var Buffer; Count: LongInt): LongInt;
+begin
+  Result := inherited Read(Buffer, Count);
+end;
+
+// Writes the stream data to the buffer of the BLOB field.
+procedure TsBlobStream.SaveBlobData;
+var
+  buffer: TRecordBuffer;
+begin
+  if FDataset.GetActiveBuffer(buffer) then
+  begin
+    inc(buffer, FDataset.FFieldOffsets[FField.FieldNo-1]);
+    Position := 0;
+    with PsBlobData(buffer)^ do
+    begin
+      SetLength(Data, Size);
+      Read(Data[0], Size);  // Reads the stream data to put them into the buffer
+    end;
+    Position := 0;
+  end;
+  FModified := false;
+end;
+
+function TsBlobStream.Write(const Buffer; Count: LongInt): LongInt;
+begin
+  Result := inherited Write(Buffer, Count);
+  FModified := true;
+end;
+
 
 { TsWorksheetDataset }
 
@@ -275,7 +372,7 @@ begin
   inherited;
   FAutoFieldDefs := true;
   FRecordCount := -1;
-  FDataSize := -1;
+  FTotalFieldSize := -1;
   FRecordBufferSize := -1;
   FRecNo := -1;
   FAutoIncValue := -1;
@@ -287,6 +384,27 @@ begin
   Close;
   inherited;
 end;
+
+procedure TsWorksheetDataset.AllocBlobPointers(Buffer: TRecordBuffer);
+var
+  i: Integer;
+  f: TField;
+  offset: Integer;
+begin
+  for i := 0 to FieldCount-1 do
+  begin
+    f := Fields[i];
+    if f.DataType in [ftMemo{, ftGraphic}] then
+    begin
+      offset := SizeOf(TsBlobData);
+
+      offset := FFieldOffsets[f.FieldNo-1];
+      FillChar(PsBlobData(Buffer + offset)^, SizeOf(TsBlobData), 0);
+      SetLength(PsBlobData(Buffer + offset)^.Data, 0);
+    end;
+  end;
+end;
+
 
 { Allocates a buffer for the dataset
 
@@ -304,6 +422,7 @@ begin
   n := GetRecordSize + CalcFieldsSize;
   GetMem(Result, n);
   FillChar(Result^, n, 0);
+  AllocBlobPointers(Result);
 end;
 
 { Returns whether the specified bookmark is valid, i.e. the worksheet row index
@@ -351,6 +470,8 @@ begin
         fs := SizeOf(TDateTime);  // date/time values are TDateTime in the buffer
       ftBoolean:
         fs := SizeOf(WordBool);  // boolean is expected by TBooleanField to be WordBool
+      ftMemo:
+        fs := SizeOf(TsBlobData);
       else
         DatabaseError(Format('Field data type %s not supported.', [
           GetEnumName(TypeInfo(TFieldType), integer(FieldDefs[i-1].DataType))
@@ -369,7 +490,7 @@ procedure TsWorksheetDataset.Clear(ClearDefs: Boolean);
 begin
   FRecNo := -1;
   FRecordCount := -1;
-  FDataSize := -1;
+  FTotalFieldSize := -1;
   FRecordBufferSize := -1;
   if Active then
     Resync([]);
@@ -410,6 +531,12 @@ begin
     cell2 := PPCell(Bookmark2)^;
     Result := Int64(cell1^.Row) - Int64(cell2^.Row);
   end;
+end;
+
+function TsWorksheetDataSet.CreateBlobStream(Field: TField;
+  Mode: TBlobStreamMode): TStream;
+begin
+  Result := TsBlobStream.Create(Field as TBlobField, Mode);
 end;
 
 { Creates a new table, i.e. a new empty worksheet based on the given FieldDefs
@@ -628,9 +755,28 @@ begin
       Result := Result + ch;
 end;
 
+procedure TsWorksheetDataset.FreeBlobPointers(Buffer: TRecordBuffer);
+var
+  i: Integer;
+  f: TField;
+  offset: Integer;
+begin
+  for i := 0 to FieldCount-1 do
+  begin
+    f := Fields[i];
+    if f.DataType in [ftMemo{, ftGraphic}] then
+    begin
+      offset := FFieldOffsets[f.FieldNo-1];
+      SetLength(PsBlobData(Buffer + offset)^.Data,0);
+  //    FillChar(PsBlobData(Buffer + offset)^, SizeOf(TsBlobData), 0);
+    end;
+  end;
+end;
+
 // Frees a record buffer.
 procedure TsWorksheetDataset.FreeRecordBuffer(var Buffer: TRecordBuffer);
 begin
+  FreeBlobPointers(Buffer);
   FreeMem(Buffer);
 end;
 
@@ -699,21 +845,6 @@ begin
   Result := GetFirstDataRowIndex + FRecNo;
 end;
 
-// Returns the size of the data part in a buffer. This is the sume of all
-// field sizes.
-function TsWorksheetDataset.GetDataSize: Integer;
-var
-  f: TField;
-begin
-  if FDataSize = -1 then
-  begin
-    FDataSize := 0;
-    for f in Fields do
-      FDataSize := FDataSize + f.DataSize;
-  end;
-  Result := FDataSize;
-end;
-
 { Extracts the data value of a specific field from the active buffer and copies
   it to the memory to which Buffer points.
   Returns false when nothing is copied.
@@ -749,9 +880,8 @@ begin
         Move(srcBuffer^, dt, SizeOf(TDateTime));
         dtr := DateTimeToDateTimeRec(Field.DataType, dt);
         Move(dtr, Buffer^, SizeOf(TDateTimeRec));
-      end else begin
+      end else
         Move(srcBuffer^, Buffer^, Field.DataSize);
-      end;
     end;
   end else
   begin  // Calculated, Lookup
@@ -781,7 +911,7 @@ end;
 function TsWorksheetDataset.GetNullMaskPtr(Buffer: TRecordBuffer): Pointer;
 begin
   Result := Buffer;
-  inc(Result, GetDataSize);
+  inc(Result, GetTotalFieldSize);
 end;
 
 // The information whether a field is NULL is stored in the bits of the
@@ -870,7 +1000,7 @@ end;
 // Returns a pointer to the bookmark block inside the given buffer.
 function TsWorksheetDataset.GetRecordInfoPtr(Buffer: TRecordBuffer): PsRecordInfo;
 begin
-  Result := PsRecordInfo(Buffer + GetDataSize + GetNullMaskSize);
+  Result := PsRecordInfo(Buffer + GetTotalFieldSize + GetNullMaskSize);
 end;
 
 { Determines the size of the full record buffer:
@@ -880,13 +1010,32 @@ end;
 function TsWorksheetDataset.GetRecordSize: Word;
 begin
   if FRecordBufferSize = -1 then
-    FRecordBufferSize := GetDataSize + GetNullMaskSize + SizeOf(TsRecordInfo);
+    FRecordBufferSize := GetTotalFieldSize + GetNullMaskSize + SizeOf(TsRecordInfo);
   Result := FRecordBufferSize;
 end;
 
 function TsWorksheetDataset.GetRowIndexFromRecNo(ARecNo: Integer): TRowIndex;
 begin
   Result := GetFirstDataRowIndex + ARecNo;
+end;
+
+// Returns the size of the data part in a buffer. This is the sume of all
+// field sizes.
+function TsWorksheetDataset.GetTotalFieldSize: Integer;
+var
+  f: TField;
+begin
+  if FTotalFieldSize = -1 then
+  begin
+    FTotalFieldSize := 0;
+    for f in Fields do
+      if f is TBlobField then
+        // Blob fields have zero DataSize, but they occupy space in the record buffer.
+        FTotalFieldSize := FTotalFieldSize + SizeOf(TsBlobData)
+      else
+        FTotalFieldSize := FTotalFieldSize + f.DataSize;
+  end;
+  Result := FTotalFieldSize;
 end;
 
 { Called internally when a record is added. }
@@ -920,7 +1069,7 @@ begin
 
   if DefaultFields then
     DestroyFields;
-  FDataSize := -1;
+  FTotalFieldSize := -1;
   FRecordBufferSize := -1;
   FRecNo := -1;
 end;
@@ -1003,14 +1152,14 @@ begin
     FFirstRow := FWorksheet.GetFirstRowIndex(true);
     FLastRow := FWorksheet.GetLastOccupiedRowIndex;
     FRecordCount := -1;
-    FDataSize := -1;
+    FTotalFieldSize := -1;
     FRecordBufferSize := -1;
 
     InternalInitFieldDefs;
     if DefaultFields then
       CreateFields;
     BindFields(True);  // Computes CalcFieldsSize
-    GetDataSize;
+    GetTotalFieldSize;
     GetRecordSize;
     FRecNo := -1;
 
@@ -1058,10 +1207,16 @@ end;
 
 { Reinitializes a buffer which has been allocated previously
   -> zero out everything
-  In this step the NullMask is erased, and this means that all fields are null. }
+  In this step the NullMask is erased, and this means that all fields are null.
+
+  We cannot just fill the buffer with 0s since that would overwrite our BLOB
+  pointers. Therefore we free the blob pointers first, then fill the buffer
+  with zeros, then reallocate the blob pointers }
 procedure TsWorksheetDataset.InternalInitRecord(Buffer: TRecordBuffer);
 begin
+  FreeBlobPointers(Buffer);
   FillChar(Buffer^, FRecordBufferSize, 0);
+  AllocBlobPointers(Buffer);
 end;
 
 { Sets the database cursor to the record specified by the given buffer. We
@@ -1098,6 +1253,7 @@ var
   {%H-}wb: WordBool;
   nullMask: Pointer;
   maxLen: Integer;
+  fs: Integer;
 begin
   nullMask := GetNullMaskPtr(Buffer);
   row := GetRowIndexFromRecNo(ARecNo);
@@ -1109,21 +1265,33 @@ begin
     // which adds a blank cell in such a case.
     cell := FWorksheet.GetCell(row, col);
     ClearFieldIsNull(nullMask, field.FieldNo);
+    fs := field.DataSize;
     case cell^.ContentType of
       cctUTF8String:
         begin
-          maxLen := field.FieldDef.Size div field.FieldDef.CharSize;
-          s := UTF8LeftStr(FWorksheet.ReadAsText(cell), maxLen);
+          s := FWorksheet.ReadAsText(cell);
           if s = '' then
             SetFieldIsNull(nullMask, field.FieldNo)
           else
+          if field.DataType = ftMemo then
+          begin
+            s := s + #0;
+            with PsBlobData(Buffer)^ do
+            begin
+              SetLength(Data, Length(s));
+              Move(s[1], Data[0], Length(s));
+            end;
+            fs := SizeOf(TsBlobData);  // field.Datasize is 0 for a BLOB
+          end else
           if field.DataType in [ftWideString, ftFixedWideChar] then
           begin
-            ws := UTF8Decode(s) + #0#0;
+            maxLen := field.FieldDef.Size div 2;
+            ws := UTF8Decode(UTF8LeftStr(s, maxLen)) + #0#0;
             Move(ws[1], Buffer^, Length(ws)*2);
           end else
           begin
-            s := s + #0;
+            maxLen := field.FieldDef.Size;
+            s := UTF8LeftStr(s, maxLen) + #0;
             Move(s[1], Buffer^, Length(s));
           end;
         end;
@@ -1184,7 +1352,7 @@ begin
       else
         ;
     end;
-    inc(Buffer, field.DataSize);
+    inc(Buffer, fs);
   end;
 end;
 
@@ -1464,7 +1632,8 @@ var
   cell: PCell;
   field: TField;
   P: Pointer;
-  ws: WideString;
+  s: String = '';
+  ws: WideString = '';
 begin
   row := GetCurrentRowIndex;
   P := Buffer;
@@ -1512,6 +1681,13 @@ begin
             Setlength(ws, StrLen(PWideChar(P)));
             Move(P^, ws[1], Length(ws)*2);
             FWorksheet.WriteText(cell, UTF8Encode(ws));
+          end;
+        ftMemo:
+          begin
+            SetLength(s, Length(PsBlobData(P)^.Data));
+            Move(PsBlobData(P)^.Data[0], s[1], Length(s));
+            if s[Length(s)] = #0 then System.Delete(s, Length(s), 1);
+            FWorksheet.WriteText(cell, s);
           end;
         else
           ;
