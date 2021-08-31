@@ -208,7 +208,7 @@ type
 implementation
 
 uses
-  LazUTF8, Math, TypInfo, Variants, fpsNumFormat;
+  LazUTF8, LazUTF16, Math, TypInfo, Variants, fpsNumFormat;
 
 { Null mask handling
 
@@ -320,13 +320,15 @@ end;
 procedure TsBlobStream.LoadBlobData;
 var
   buffer: TRecordBuffer;
+  nullMask: Pointer;
 begin
   Self.Size := 0;
   if FDataset.GetActiveBuffer(buffer) then
   begin
+    nullMask := FDataset.GetNullMaskPtr(buffer);
     inc(buffer, FDataset.FFieldOffsets[FField.FieldNo-1]);
     Size := 0;
-    if not GetFieldIsNull(FDataset.GetNullMaskPtr(buffer), FField.FieldNo) then
+    if not GetFieldIsNull(nullMask, FField.FieldNo) then
       with PsBlobData(buffer)^ do
         Write(Data[0], Length(Data));   // Writes the data into the stream
     Position := 0;
@@ -341,20 +343,26 @@ begin
 end;
 
 // Writes the stream data to the buffer of the BLOB field.
+// Take care of the null mask!
 procedure TsBlobStream.SaveBlobData;
 var
   buffer: TRecordBuffer;
+  nullMask: Pointer;
 begin
   if FDataset.GetActiveBuffer(buffer) then
   begin
+    nullMask := FDataset.GetNullMaskPtr(buffer);
     inc(buffer, FDataset.FFieldOffsets[FField.FieldNo-1]);
     Position := 0;
-    with PsBlobData(buffer)^ do
-    begin
-      SetLength(Data, Size);
-      if Data <> nil then
+    if Size = 0 then
+      SetFieldIsNull(nullMask, FField.FieldNo)
+    else
+      with PsBlobData(buffer)^ do
+      begin
+        SetLength(Data, Size);
         Read(Data[0], Size);  // Reads the stream data to put them into the buffer
-    end;
+        ClearFieldIsNull(nullMask, FField.FieldNo);
+      end;
     Position := 0;
   end;
   FModified := false;
@@ -446,13 +454,13 @@ var
 begin
   SetLength(FFieldOffsets, FieldDefs.Count);
   FFieldOffsets[0] := 0;
-  for i := 1 to FieldDefs.Count-1 do
+  for i := 0 to FieldDefs.Count-2 do
   begin
-    case FieldDefs[i-1].DataType of
+    case FieldDefs[i].DataType of
       ftString, ftFixedChar:
-        fs := FieldDefs[i-1].Size + 1;  // +1 for zero termination
+        fs := FieldDefs[i].Size + 1;  // +1 for zero termination
       ftWideString, ftFixedWideChar:
-        fs := FieldDefs[i-1].Size*2 + 2;
+        fs := (FieldDefs[i].Size + 1) * 2;
       ftInteger, ftAutoInc:
         fs := SizeOf(Integer);
       {$IF FPC_FullVersion >= 30202}
@@ -475,10 +483,10 @@ begin
         fs := SizeOf(TsBlobData);
       else
         DatabaseError(Format('Field data type %s not supported.', [
-          GetEnumName(TypeInfo(TFieldType), integer(FieldDefs[i-1].DataType))
+          GetEnumName(TypeInfo(TFieldType), integer(FieldDefs[i].DataType))
         ]));
     end;
-    FFieldOffsets[i] := FFieldOffsets[i-1] + fs;
+    FFieldOffsets[i+1] := FFieldOffsets[i] + fs;
   end;
 end;
 
@@ -645,8 +653,29 @@ begin
           // Find longest text in column...
           for r := GetFirstDataRowIndex to GetLastDataRowIndex do
             fs := Max(fs, Length(FWorksheet.ReadAsText(r, c)));
-          // ... and round it up to a multiple of 10 for edition ---> VarChars to be introduced later!
-          fs := (fs div 10) * 10 + 10;
+          if fs > 255 then  // Switch to memo when the strings are "very" long
+          begin
+            ft := ftMemo;
+            fs := 0;
+          end else
+          if fs > 128 then
+            fs := 255
+          else
+          if fs > 64 then
+            fs := 128
+          else
+          if fs > 32 then
+            fs := 64
+          else
+          if fs > 16 then
+            fs := 32
+          else
+          if fs > 8 then
+            fs := 16
+          else
+            fs := 8;
+ //         // ... and round it up to a multiple of 10 for edition ---> VarChars to be introduced later!
+//          fs := (fs div 10) * 10 + 10;
         end;
       ftInteger:    // Distinguish between integer and float
         for r := GetFirstDataRowIndex to GetLastDataRowIndex do
@@ -771,7 +800,7 @@ begin
       offset := FFieldOffsets[f.FieldNo-1];
       PsBlobData(Buffer + offset)^.Data := nil;
 //      SetLength(PsBlobData(Buffer + offset)^.Data,0);
-      FillChar(PsBlobData(Buffer + offset)^, SizeOf(TsBlobData), 0);
+//      FillChar(PsBlobData(Buffer + offset)^, SizeOf(TsBlobData), 0);
     end;
   end;
 end;
@@ -1286,19 +1315,18 @@ begin
             with PsBlobData(Buffer)^ do
             begin
               SetLength(Data, Length(s));
-              if s <> '' then
-                Move(s[1], Data[0], Length(s));
+              Move(s[1], Data[0], Length(s));
             end;
           end else
           if field.DataType in [ftWideString, ftFixedWideChar] then
           begin
-            maxLen := field.FieldDef.Size div 2;
-            ws := UTF8Decode(UTF8LeftStr(s, maxLen)) + #0#0;
+            maxLen := (field.DataSize - 2) div 2;
+            ws := UTF16Copy(UTF8Decode(s), 1, maxLen) + #0#0;
             Move(ws[1], Buffer^, Length(ws)*2);
           end else
           begin
-            maxLen := field.FieldDef.Size;
-            s := UTF8LeftStr(s, maxLen) + #0;
+            maxLen := field.DataSize - 1;
+            s := UTF8Copy(s, 1, maxLen) + #0;
             Move(s[1], Buffer^, Length(s));
           end;
         end;
