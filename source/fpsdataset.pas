@@ -326,8 +326,9 @@ begin
   begin
     inc(buffer, FDataset.FFieldOffsets[FField.FieldNo-1]);
     Size := 0;
-    with PsBlobData(buffer)^ do
-      Write(Data[0], Length(Data));   // Writes the data into the stream
+    if not GetFieldIsNull(FDataset.GetNullMaskPtr(buffer), FField.FieldNo) then
+      with PsBlobData(buffer)^ do
+        Write(Data[0], Length(Data));   // Writes the data into the stream
     Position := 0;
     SaveToFile('test.txt');
   end;
@@ -351,7 +352,8 @@ begin
     with PsBlobData(buffer)^ do
     begin
       SetLength(Data, Size);
-      Read(Data[0], Size);  // Reads the stream data to put them into the buffer
+      if Data <> nil then
+        Read(Data[0], Size);  // Reads the stream data to put them into the buffer
     end;
     Position := 0;
   end;
@@ -396,11 +398,10 @@ begin
     f := Fields[i];
     if f.DataType in [ftMemo{, ftGraphic}] then
     begin
-      offset := SizeOf(TsBlobData);
-
       offset := FFieldOffsets[f.FieldNo-1];
-      FillChar(PsBlobData(Buffer + offset)^, SizeOf(TsBlobData), 0);
-      SetLength(PsBlobData(Buffer + offset)^.Data, 0);
+  //    FillChar(PsBlobData(Buffer + offset)^, SizeOf(TsBlobData), 0);
+      PsBlobData(Buffer + offset)^.Data := nil;
+//      SetLength(PsBlobData(Buffer + offset)^.Data, 0);
     end;
   end;
 end;
@@ -764,11 +765,13 @@ begin
   for i := 0 to FieldCount-1 do
   begin
     f := Fields[i];
-    if f.DataType in [ftMemo{, ftGraphic}] then
+    if f is TBlobField then
+//    if f.DataType in [ftMemo{, ftGraphic}] then
     begin
       offset := FFieldOffsets[f.FieldNo-1];
-      SetLength(PsBlobData(Buffer + offset)^.Data,0);
-  //    FillChar(PsBlobData(Buffer + offset)^, SizeOf(TsBlobData), 0);
+      PsBlobData(Buffer + offset)^.Data := nil;
+//      SetLength(PsBlobData(Buffer + offset)^.Data,0);
+      FillChar(PsBlobData(Buffer + offset)^, SizeOf(TsBlobData), 0);
     end;
   end;
 end;
@@ -881,6 +884,7 @@ begin
         dtr := DateTimeToDateTimeRec(Field.DataType, dt);
         Move(dtr, Buffer^, SizeOf(TDateTimeRec));
       end else
+        // No need to handle BLOB fields here because they always have Buffer=nil
         Move(srcBuffer^, Buffer^, Field.DataSize);
     end;
   end else
@@ -1265,7 +1269,11 @@ begin
     // which adds a blank cell in such a case.
     cell := FWorksheet.GetCell(row, col);
     ClearFieldIsNull(nullMask, field.FieldNo);
-    fs := field.DataSize;
+    if field is TBlobField then
+      // BLOB fields have zero DataSize although they occupy space in the buffer
+      fs := SizeOf(TsBlobData)
+    else
+      fs := field.DataSize;
     case cell^.ContentType of
       cctUTF8String:
         begin
@@ -1275,13 +1283,12 @@ begin
           else
           if field.DataType = ftMemo then
           begin
-            s := s + #0;
             with PsBlobData(Buffer)^ do
             begin
               SetLength(Data, Length(s));
-              Move(s[1], Data[0], Length(s));
+              if s <> '' then
+                Move(s[1], Data[0], Length(s));
             end;
-            fs := SizeOf(TsBlobData);  // field.Datasize is 0 for a BLOB
           end else
           if field.DataType in [ftWideString, ftFixedWideChar] then
           begin
@@ -1685,8 +1692,8 @@ begin
         ftMemo:
           begin
             SetLength(s, Length(PsBlobData(P)^.Data));
-            Move(PsBlobData(P)^.Data[0], s[1], Length(s));
-            if s[Length(s)] = #0 then System.Delete(s, Length(s), 1);
+            if Length(PsBlobData(P)^.Data) > 0 then
+              Move(PsBlobData(P)^.Data[0], s[1], Length(s));
             FWorksheet.WriteText(cell, s);
           end;
         else
