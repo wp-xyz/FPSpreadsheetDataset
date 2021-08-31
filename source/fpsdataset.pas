@@ -160,6 +160,7 @@ type
       Options: TLocateOptions; out ARecNo: integer): Boolean;
     procedure ParseFilter(const AFilter: STring);
     procedure WriteBufferToWorksheet(Buffer: TRecordBuffer);
+
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -175,7 +176,7 @@ type
     function Lookup(const Keyfields: String; const KeyValues: Variant;
       const ResultFields: String): Variant; override;
     procedure SetFieldData(Field: TField; Buffer: Pointer); override;
-    property Filter; //unimplemented;  // Use OnFilter instead
+
     property Modified: boolean read FModified;
 
   // This section is to be removed after debugging.
@@ -189,19 +190,38 @@ type
     property FileName: TFileName read FFileName write FFileName;
     property SheetName: String read FSheetName write FSheetName;
 
+    // inherited properties
     property Active;
+    property AutoCalcFields;
+    property FieldDefs;
+    property Filter;
     property Filtered;
+    property FilterOptions;
+
+    // inherited events
     property AfterCancel;
     property AfterClose;
+    property AfterDelete;
+    property AfterEdit;
+    property AfterInsert;
     property AfterOpen;
     property AfterPost;
+    property AfterRefresh;
     property AfterScroll;
     property BeforeCancel;
     property BeforeClose;
+    property BeforeDelete;
+    property BeforeEdit;
+    property BeforeInsert;
     property BeforeOpen;
     property BeforePost;
+    property BeforeRefresh;
     property BeforeScroll;
+    property OnCalcFields;
+    property OnDeleteError;
+    property OnEditError;
     property OnFilterRecord;
+    property OnNewRecord;
     property OnPostError;
   end;
 
