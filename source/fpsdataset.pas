@@ -8,7 +8,7 @@
   LICENSE: See the file COPYING.modifiedLGPL.txt, included in the Lazarus
            distribution, for details about the license.
 
-  Documentation used:
+  References:
   * https://www.delphipower.xyz/guide_8/building_custom_datasets.html
   * http://etutorials.org/Programming/mastering+delphi+7/Part+III+Delphi+Database-Oriented+Architectures/Chapter+17+Writing+Database+Components/Building+Custom+Datasets/
   * http://216.19.73.24/articles/customds.asp
@@ -16,7 +16,7 @@
 
   Much of the code is adapted from TMemDataset.
 
-  Current status (Aug 28, 2021):
+  Current status (Sept 01, 2021):
 
   Working
   * Field defs: determined automatically from file
@@ -27,20 +27,27 @@
     ftWideString, ftFixedWideString, ftMemo
   * Locate: working
   * Lookup: working
-  * Edit, Delete, Insert, Append: working, Post and Cancel ok
+  * Edit, Delete, Insert, Append, Post, Cancel: working
   * NULL fields: working
   * GetBookmark, GotoBookmark: working
-  * Filtering by OnFilter event and by Filter property, working.
+  * Filtering by OnFilter event and by Filter property: working.
 
   Planned but not yet working
   * Calculated fields: in code, but not yet tested.
-  * Persistent fields: to be done
+  * Persistent fields: to be done/checked
   ' Field defs: Required, Unique etc not supported ATM.
   * Indexes: not implemented
   * Sorting: not implemented
 
   Issues
-  ...
+  * TStringField and TMemoField by default store strings using code page CP_ACP.
+    It should be UTF8 because FPSpreadsheet works this way. A conversion using
+    the TDataset.Translate method could be included but the problem is that
+    the field length cannot be fixed any more after initialization: a field set
+    to width 3 which receives the string 'äöü' from the workbook is displayed
+    only as 'ä' because each "character" is 2 bytes long and thus the string is
+    truncated after the 'ä'.
+    --> Workaround: Use fieldtype ftWideString instead!
 -------------------------------------------------------------------------------}
 
 unit fpsDataset;
