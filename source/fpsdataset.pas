@@ -58,7 +58,7 @@ interface
 
 uses
   Classes, SysUtils, DB, BufDataset_Parser,
-  fpSpreadsheet, fpsTypes, fpsUtils;
+  fpSpreadsheet, fpsTypes, fpsUtils, fpsAllFormats;
 
 type
   TRowIndex = Int64;
@@ -232,10 +232,21 @@ type
     property OnPostError;
   end;
 
+procedure Register;
+
+
 implementation
 
 uses
   LazUTF8, LazUTF16, Math, TypInfo, Variants, fpsNumFormat;
+
+procedure Register;
+begin
+  RegisterComponents('Data Access', [
+    TsWorksheetDataset
+  ]);
+end;
+
 
 { Null mask handling
 

@@ -1,0 +1,236 @@
+object Form1: TForm1
+  Left = 256
+  Height = 465
+  Top = 131
+  Width = 1064
+  Caption = 'Form1'
+  ClientHeight = 465
+  ClientWidth = 1064
+  OnCreate = FormCreate
+  LCLVersion = '2.3.0.0'
+  object DBGrid1: TDBGrid
+    Left = 0
+    Height = 465
+    Top = 0
+    Width = 1064
+    Align = alClient
+    Color = clWindow
+    Columns = <>
+    DataSource = DataSource1
+    TabOrder = 0
+  end
+  object sWorksheetDataset1: TsWorksheetDataset
+    SheetName = 'Sheet'
+    FieldDefs = <    
+      item
+        Name = 'AutoIncCol'
+        DataType = ftInteger
+        Precision = -1
+        Column = 0
+      end    
+      item
+        Name = 'IntCol'
+        DataType = ftInteger
+        Precision = -1
+        Column = 1
+      end    
+      item
+        Name = 'SmallIntCol'
+        DataType = ftInteger
+        Precision = -1
+        Column = 2
+      end    
+      item
+        Name = 'Wordcol'
+        DataType = ftInteger
+        Precision = -1
+        Column = 3
+      end    
+      item
+        Name = 'StringCol3'
+        DataType = ftString
+        Precision = -1
+        Size = 8
+        Column = 4
+      end    
+      item
+        Name = 'StringCol5'
+        DataType = ftString
+        Precision = -1
+        Size = 8
+        Column = 5
+      end    
+      item
+        Name = 'WideStringCol'
+        DataType = ftString
+        Precision = -1
+        Size = 16
+        Column = 6
+      end    
+      item
+        Name = 'MemoCol'
+        DataType = ftMemo
+        Precision = -1
+        Column = 7
+      end    
+      item
+        Name = 'FloatCol'
+        DataType = ftFloat
+        Precision = -1
+        Column = 8
+      end    
+      item
+        Name = 'DateCol'
+        DataType = ftDateTime
+        Precision = -1
+        Column = 9
+      end    
+      item
+        Name = 'BoolCol'
+        DataType = ftBoolean
+        Precision = -1
+        Column = 10
+      end    
+      item
+        Name = 'CurrencyCol'
+        DataType = ftCurrency
+        Precision = -1
+        Column = 11
+      end>
+    FilterOptions = []
+    OnCalcFields = sWorksheetDataset1CalcFields
+    Left = 79
+    Top = 50
+    object sWorksheetDataset1AutoIncCol: TLongintField
+      FieldKind = fkData
+      FieldName = 'AutoIncCol'
+      Index = 0
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+    end
+    object sWorksheetDataset1IntCol: TLongintField
+      FieldKind = fkData
+      FieldName = 'IntCol'
+      Index = 1
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+    end
+    object sWorksheetDataset1SmallIntCol: TLongintField
+      FieldKind = fkData
+      FieldName = 'SmallIntCol'
+      Index = 2
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+    end
+    object sWorksheetDataset1Wordcol: TLongintField
+      FieldKind = fkData
+      FieldName = 'Wordcol'
+      Index = 3
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+    end
+    object sWorksheetDataset1StringCol3: TStringField
+      FieldKind = fkData
+      FieldName = 'StringCol3'
+      Index = 4
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+      Size = 8
+    end
+    object sWorksheetDataset1StringCol5: TStringField
+      FieldKind = fkData
+      FieldName = 'StringCol5'
+      Index = 5
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+      Size = 8
+    end
+    object sWorksheetDataset1WideStringCol: TStringField
+      FieldKind = fkData
+      FieldName = 'WideStringCol'
+      Index = 6
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+      Size = 16
+    end
+    object sWorksheetDataset1MemoCol: TMemoField
+      FieldKind = fkData
+      FieldName = 'MemoCol'
+      Index = 7
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+      BlobType = ftMemo
+      Transliterate = False
+    end
+    object sWorksheetDataset1FloatCol: TFloatField
+      FieldKind = fkData
+      FieldName = 'FloatCol'
+      Index = 8
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+      DisplayFormat = '0.000'
+      Precision = -1
+    end
+    object sWorksheetDataset1DateCol: TDateTimeField
+      FieldKind = fkData
+      FieldName = 'DateCol'
+      Index = 9
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+    end
+    object sWorksheetDataset1BoolCol: TBooleanField
+      FieldKind = fkData
+      FieldName = 'BoolCol'
+      Index = 10
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+      DisplayValues = 'True;False'
+    end
+    object sWorksheetDataset1CurrencyCol: TCurrencyField
+      FieldKind = fkData
+      FieldName = 'CurrencyCol'
+      Index = 11
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+      Precision = -1
+    end
+    object sWorksheetDataset1calculated: TFloatField
+      FieldKind = fkCalculated
+      FieldName = 'calculated'
+      Index = 12
+      LookupCache = False
+      ProviderFlags = [pfInUpdate, pfInWhere]
+      ReadOnly = False
+      Required = False
+    end
+  end
+  object DataSource1: TDataSource
+    DataSet = sWorksheetDataset1
+    Left = 79
+    Top = 107
+  end
+end
