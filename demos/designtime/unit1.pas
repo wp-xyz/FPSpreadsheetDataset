@@ -54,7 +54,10 @@ end;
 
 procedure TForm1.sWorksheetDataset1CalcFields(DataSet: TDataSet);
 begin
-  sWorksheetDataset1calculated.AsFloat := sWorksheetDataset1FloatCol.AsFloat + 1.0;
+  if sWorksheetDataset1FloatCol.IsNull then
+    sWorksheetDataset1calculated.Clear
+  else
+    sWorksheetDataset1calculated.AsFloat := sWorksheetDataset1FloatCol.AsFloat + 1.0;
 end;
 
 end.

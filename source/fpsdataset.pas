@@ -31,13 +31,14 @@
   * NULL fields: working
   * GetBookmark, GotoBookmark: working
   * Filtering by OnFilter event and by Filter property: working.
+  * Persistent and calculated fields working
 
   Planned but not yet working
-  * Calculated fields: in code, but not yet tested.
-  * Persistent fields: to be done/checked
   ' Field defs: Required, Unique etc not supported ATM.
   * Indexes: not implemented
   * Sorting: not implemented
+  * Auto-Format detection of string fields: use ftWideString rather than ftString
+    (see issues below).
 
   Issues
   * TStringField and TMemoField by default store strings using code page CP_ACP.
@@ -560,7 +561,10 @@ var
   fieldDef: TsFieldDef;
 begin
   fieldDef := AField.FieldDef as TsFieldDef;
-  Result := fieldDef.Column;
+  if fieldDef <> nil then
+    Result := fieldDef.Column
+  else
+    Result := -1;
 end;
 
 // Compares two bookmarks (row indices). This tricky handling of nil is
@@ -1331,6 +1335,8 @@ begin
   for field in Fields do
   begin
     col := ColIndexFromField(field);
+    if col = -1 then  // this happens for calculated fields.
+      continue;
     // Find the cell at the column and row. BUT: For bookmark support, we need
     // a cell even when there is none. So: Find the cell by calling GetCell
     // which adds a blank cell in such a case.
