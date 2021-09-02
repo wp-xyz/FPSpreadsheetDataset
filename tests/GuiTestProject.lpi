@@ -57,11 +57,6 @@
       <Debugging>
         <DebugInfoType Value="dsDwarf2Set"/>
       </Debugging>
-      <Options>
-        <Win32>
-          <GraphicApplication Value="True"/>
-        </Win32>
-      </Options>
     </Linking>
   </CompilerOptions>
   <Debugging>
@@ -74,6 +69,9 @@
       </Item>
       <Item>
         <Name Value="EFOpenError"/>
+      </Item>
+      <Item>
+        <Name Value="EAssertionFailedError"/>
       </Item>
     </Exceptions>
   </Debugging>
