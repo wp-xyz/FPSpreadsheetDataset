@@ -34,7 +34,7 @@
   * Persistent and calculated fields working
 
   Planned but not yet working
-  ' Field defs: Required, Unique etc not supported ATM.
+  ' Field defs: Required, Unique etc possibly not supported ATM - to be tested
   * Indexes: not implemented
   * Sorting: not implemented
   * Auto-Format detection of string fields: use ftWideString rather than ftString
@@ -72,6 +72,7 @@ type
     FColumn: TColIndex;
   public
     constructor Create(ACollection: TCollection); override;
+    procedure Assign(ASource: TPersistent); override;
   published
     property Column: TColIndex read FColumn write FColumn default -1;
   end;
@@ -299,6 +300,13 @@ constructor TsFieldDef.Create(ACollection: TCollection);
 begin
   inherited;
   FColumn := -1;
+end;
+
+procedure TsFieldDef.Assign(ASource: TPersistent);
+begin
+  if ASource is TsFieldDef then
+    FColumn := TsFieldDef(ASource).FColumn;
+  inherited Assign(ASource);
 end;
 
 
