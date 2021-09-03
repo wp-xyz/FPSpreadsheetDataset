@@ -47,17 +47,17 @@ object Form1: TForm1
         Column = 3
       end    
       item
-        Name = 'StringCol3'
+        Name = 'TEXT-COL1'
         DataType = ftString
         Precision = -1
         Size = 8
         Column = 4
       end    
       item
-        Name = 'StringCol5'
+        Name = 'TEXT-COL2'
         DataType = ftString
         Precision = -1
-        Size = 8
+        Size = 16
         Column = 5
       end    
       item
@@ -76,7 +76,7 @@ object Form1: TForm1
       item
         Name = 'FloatCol'
         DataType = ftFloat
-        Precision = -1
+        Precision = 3
         Column = 8
       end    
       item
@@ -97,136 +97,9 @@ object Form1: TForm1
         Precision = -1
         Column = 11
       end>
-    FilterOptions = []
     OnCalcFields = sWorksheetDataset1CalcFields
     Left = 79
     Top = 50
-    object sWorksheetDataset1AutoIncCol: TLongintField
-      FieldKind = fkData
-      FieldName = 'AutoIncCol'
-      Index = 0
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-    end
-    object sWorksheetDataset1IntCol: TLongintField
-      FieldKind = fkData
-      FieldName = 'IntCol'
-      Index = 1
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-    end
-    object sWorksheetDataset1SmallIntCol: TLongintField
-      FieldKind = fkData
-      FieldName = 'SmallIntCol'
-      Index = 2
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-    end
-    object sWorksheetDataset1Wordcol: TLongintField
-      FieldKind = fkData
-      FieldName = 'Wordcol'
-      Index = 3
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-    end
-    object sWorksheetDataset1StringCol3: TStringField
-      FieldKind = fkData
-      FieldName = 'StringCol3'
-      Index = 4
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-      Size = 8
-    end
-    object sWorksheetDataset1StringCol5: TStringField
-      FieldKind = fkData
-      FieldName = 'StringCol5'
-      Index = 5
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-      Size = 8
-    end
-    object sWorksheetDataset1WideStringCol: TStringField
-      FieldKind = fkData
-      FieldName = 'WideStringCol'
-      Index = 6
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-      Size = 16
-    end
-    object sWorksheetDataset1MemoCol: TMemoField
-      FieldKind = fkData
-      FieldName = 'MemoCol'
-      Index = 7
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-      BlobType = ftMemo
-      Transliterate = False
-    end
-    object sWorksheetDataset1FloatCol: TFloatField
-      FieldKind = fkData
-      FieldName = 'FloatCol'
-      Index = 8
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-      DisplayFormat = '0.000'
-      Precision = -1
-    end
-    object sWorksheetDataset1DateCol: TDateTimeField
-      FieldKind = fkData
-      FieldName = 'DateCol'
-      Index = 9
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-    end
-    object sWorksheetDataset1BoolCol: TBooleanField
-      FieldKind = fkData
-      FieldName = 'BoolCol'
-      Index = 10
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-      DisplayValues = 'True;False'
-    end
-    object sWorksheetDataset1CurrencyCol: TCurrencyField
-      FieldKind = fkData
-      FieldName = 'CurrencyCol'
-      Index = 11
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-      Precision = -1
-    end
-    object sWorksheetDataset1calculated: TFloatField
-      FieldKind = fkCalculated
-      FieldName = 'calculated'
-      Index = 12
-      LookupCache = False
-      ProviderFlags = [pfInUpdate, pfInWhere]
-      ReadOnly = False
-      Required = False
-    end
   end
   object DataSource1: TDataSource
     DataSet = sWorksheetDataset1

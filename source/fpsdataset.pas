@@ -52,6 +52,9 @@
 
   * Manually deleting a fielddef removes it from the object tree, but not from
     the lfm file.
+
+  * Opening the dataset crashes when there is as empty cell at the end of
+    an autoinc column.
 -------------------------------------------------------------------------------}
 
 unit fpsDataset;
@@ -687,7 +690,10 @@ begin
           else
             ft := ftInteger;    // float will be checked further below
         cctUTF8String:
-          ft := ftString;
+          ft := ftWideString;
+          // Create a widestring field rather than a string field because it is
+          // easier to control correct string length in case of non-ASCII chars.
+          // See "Issues" at the top of this unit.
         cctDateTime:
           ft := ftDateTime; // ftDate, ftTime will be checked below
         cctBool:
@@ -701,7 +707,7 @@ begin
     // Determine field size and distinguish between similar field types
     fs := 0;
     case ft of
-      ftString:
+      ftWideString:
         begin
           // Find longest text in column...
           for r := GetFirstDataRowIndex to GetLastDataRowIndex do
@@ -726,9 +732,8 @@ begin
           if fs > 8 then
             fs := 16
           else
+          if fs <> 1 then
             fs := 8;
- //         // ... and round it up to a multiple of 10 for edition ---> VarChars to be introduced later!
-//          fs := (fs div 10) * 10 + 10;
         end;
       ftInteger:    // Distinguish between integer and float
         for r := GetFirstDataRowIndex to GetLastDataRowIndex do
