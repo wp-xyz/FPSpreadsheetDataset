@@ -49,6 +49,9 @@
     only as 'ä' because each "character" is 2 bytes long and thus the string is
     truncated after the 'ä'.
     --> Workaround: Use fieldtype ftWideString instead!
+
+  * Manually deleting a fielddef removes it from the object tree, but not from
+    the lfm file.
 -------------------------------------------------------------------------------}
 
 unit fpsDataset;
@@ -205,7 +208,7 @@ type
     property FieldDefs;
     property Filter;
     property Filtered;
-    property FilterOptions;
+    property FilterOptions default [];
 
     // inherited events
     property AfterCancel;
