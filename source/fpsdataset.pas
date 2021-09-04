@@ -805,9 +805,6 @@ begin
       DatabaseError('File not found.');
   end;
 
-  if (FSheetName = '') then
-    DatabaseError('Worksheet name not specified.');
-
   inherited;
 end;
 
@@ -1261,17 +1258,26 @@ procedure TsWorksheetDataset.InternalOpen;
 begin
   FWorkbook := TsWorkbook.Create;
   try
-    if not FWorkbook.ValidWorksheetName(FSheetName) then
+    if (FSheetName <> '') and (not FWorkbook.ValidWorksheetName(FSheetName)) then
       DatabaseError('"' + FSheetName + '" is not a valid worksheet name.');
 
     if not FileExists(FFileName) and (not FAutoFieldDefs) and (not FTableCreated) then
     begin
+      if FSheetName = '' then
+        DatabaseError('Worksheet name not specified.');
       FWorkSheet := FWorkbook.AddWorksheet(FSheetName);
       CreateTable;
     end else
     begin
       FWorkbook.ReadFromFile(FFileName);
-      FWorksheet := FWorkbook.GetWorksheetByName(FSheetName);
+      if FSheetName = '' then
+      begin
+        FWorksheet := FWorkbook.GetFirstWorksheet;
+        if not (csDesigning in ComponentState) then
+          FSheetName := FWorksheet.Name;
+      end
+      else
+        FWorksheet := FWorkbook.GetWorksheetByName(FSheetName);
       if FWorksheet = nil then
         DatabaseError('Worksheet not found.');
     end;
