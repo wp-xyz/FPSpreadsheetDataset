@@ -16,7 +16,7 @@
 
   Much of the code is adapted from TMemDataset.
 
-  Current status (Sept 01, 2021):
+  Current status (Sept 04, 2021):
 
   Working
   * Field defs: determined automatically from file
@@ -37,8 +37,6 @@
   ' Field defs: Required, Unique etc possibly not supported ATM - to be tested
   * Indexes: not implemented
   * Sorting: not implemented
-  * Auto-Format detection of string fields: use ftWideString rather than ftString
-    (see issues below).
 
   Issues
   * TStringField and TMemoField by default store strings using code page CP_ACP.
@@ -54,8 +52,8 @@
   * Manually deleting a fielddef removes it from the object tree, but not from
     the lfm file.
 
-  * Opening the dataset crashes when there is as empty cell at the end of
-    an autoinc column.
+  * Insert initially adds a new record before the current position, but after
+    Post the new record is moved to the end.
 -------------------------------------------------------------------------------}
 
 unit fpsDataset;
