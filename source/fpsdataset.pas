@@ -125,7 +125,7 @@ type
     FAutoIncField: TAutoIncField;
   private
     procedure FixFieldDefs;
-    function FixFieldName(const AText: String): String;
+//    function FixFieldName(const AText: String): String;
     function GetActiveBuffer(out Buffer: TRecordBuffer): Boolean;
     function GetBookmarkCellFromRecNo(ARecNo: Integer): PCell;
     function GetCurrentRowIndex: TRowIndex;
@@ -789,8 +789,11 @@ begin
     end;
 
     // Add FieldDef and set its properties
-    TsFieldDef.Create(TsFieldDefs(FieldDefs), FixFieldName(fn), ft, fs,
-      false, FieldDefs.Count + 1, c{$IF FPC_FullVersion >= 30200}, CP_UTF8{$IFEND});
+    TsFieldDef.Create(
+      TsFieldDefs(FieldDefs),
+      fn, ft, fs, false, FieldDefs.Count + 1, c
+      {$IF FPC_FullVersion >= 30200}, CP_UTF8{$IFEND}
+    );
   end;
 
   // Determine the offsets at which the field data will begin in the buffer.
@@ -869,7 +872,7 @@ begin
   end;
 end;
 
-
+(*
 // Removes characters from AText which would make it an invalid fieldname.
 function TsWorksheetDataset.FixFieldName(const AText: String): String;
 var
@@ -880,6 +883,7 @@ begin
     if (ch in ['A'..'Z', 'a'..'z', '0'..'9']) then
       Result := Result + ch;
 end;
+*)
 
 procedure TsWorksheetDataset.FreeBlobPointers(Buffer: TRecordBuffer);
 var
