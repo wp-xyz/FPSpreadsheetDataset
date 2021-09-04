@@ -178,6 +178,7 @@ type
     function LocateRecord(const KeyFields: string; const KeyValues: Variant;
       Options: TLocateOptions; out ARecNo: integer): Boolean;
     procedure ParseFilter(const AFilter: STring);
+    procedure SetupAutoInc;
     procedure WriteBufferToWorksheet(Buffer: TRecordBuffer);
 
   public
@@ -1230,8 +1231,6 @@ end;
 
 { Opens the dataset: Opens the workbook, initializes field defs, creates fields }
 procedure TsWorksheetDataset.InternalOpen;
-var
-  f: TField;
 begin
   FWorkbook := TsWorkbook.Create;
   try
@@ -1264,16 +1263,7 @@ begin
     GetRecordSize;
     FRecNo := -1;
 
-    // Search for autoinc field
-    FAutoIncField := nil;
-    FAutoIncValue := -1;
-    for f in Fields do
-      if f is TAutoIncField then
-      begin
-        FAutoIncField := TAutoIncField(f);
-        FAutoIncValue := round(FWorksheet.ReadAsNumber(FLastRow, ColIndexFromField(f))) + 1;
-        break;
-      end;
+    SetupAutoInc;
     FModified := false;
 
     FIsOpen := true;
@@ -1729,6 +1719,44 @@ begin
     Resync([]);
   end;
 end;
+
+procedure TsWorksheetDataset.SetupAutoInc;
+var
+  f: TField;
+  c: TColIndex;
+  r: Integer;
+  mx: Integer;
+  cell: PCell;
+begin
+  // Search for autoinc field
+  FAutoIncField := nil;
+  FAutoIncValue := -1;
+  for f in Fields do
+    if f is TAutoIncField then
+    begin
+      FAutoIncField := TAutoIncField(f);
+      break;
+    end;
+
+  if FAutoIncField = nil then
+    exit;
+
+  mx := -MaxInt;
+  c := ColIndexFromField(f);
+  r := GetFirstDataRowIndex;
+  for r := GetFirstDataRowIndex to FLastRow do
+  begin
+    cell := FWorksheet.FindCell(r, c);
+    if cell <> nil then
+    begin
+      if (cell^.ContentType <> cctNumber) then
+        DatabaseError('AutoInc field must be a assigned to numeric cells.');
+      mx := Max(mx, round(FWorksheet.ReadAsNumber(cell)));
+    end;
+    FAutoIncValue := mx + 1;
+  end;
+end;
+
 
 procedure TsWorksheetDataset.WriteBufferToWorksheet(Buffer: TRecordBuffer);
 var
