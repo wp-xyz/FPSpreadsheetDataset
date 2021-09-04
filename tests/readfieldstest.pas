@@ -93,7 +93,7 @@ begin
     Result.FieldDefs.Add('DateTimeCol', ftDateTime);
     Result.FieldDefs.Add('MemoCol', ftMemo);
     for i := 0 to Result.FieldDefs.Count-1 do
-      TsFieldDef(Result.FieldDefs[i]).Column := i;
+      TsFieldDef(Result.FieldDefs[i]).ColIndex := i;
     Result.CreateTable;
   end;
   Result.Open;

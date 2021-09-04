@@ -40,6 +40,7 @@ type
     edFilterValue: TEdit;
     Label1: TLabel;
     Label2: TLabel;
+    ListBox1: TListBox;
     procedure btnAppendClick(Sender: TObject);
     procedure btnFindClick(Sender: TObject);
     procedure btnGoToBookmarkClick(Sender: TObject);
@@ -55,6 +56,7 @@ type
   private
     FDataset: TsWorksheetDataset;
     FBookmark: TBookmark;
+    procedure AfterOpenHandler(Dataset: TDataset);
     procedure AfterScrollHandler(Dataset: TDataset);
     procedure ExecFilter;
     procedure FilterRecord_String(Dataset: TDataset; var Accept: Boolean);
@@ -73,10 +75,13 @@ implementation
 {$R *.lfm}
 
 uses
-  Variants, Math;
+  Variants, Math, TypInfo;
 
 const
   DATA_FILE = '../TestData.xlsx';
+
+  AUTO_FIELD_DEFS = true;            // Select one of these two...
+//  AUTO_FIELD_DEFS = false;
 
 { TForm1 }
 
@@ -88,30 +93,38 @@ begin
   FDataset.Filename := DATA_FILE;
   FDataset.SheetName := 'Sheet';
   FDataset.AfterScroll := @AfterScrollHandler;
+  FDataset.AfterOpen := @AfterOpenHandler;
 
+  (*
+  // testdata-2
   FDataset.AutoFieldDefs := false;
-
   FDataset.FieldDefs.Add('AutoIncCol', ftAutoInc);
-  FDataset.FieldDefs.Add('IntCol', ftInteger);
-  FDataset.FieldDefs.Add('SmallIntCol', ftSmallInt);
-  FDataset.FieldDefs.Add('WordCol', ftWord);
-  FDataset.FieldDefs.Add('StringCol3', ftString, 3);
-  FDataset.FieldDefs.Add('StringCol5', ftString, 5);
-  FDataset.FieldDefs.Add('WideStringCol', ftWideString, 8);
-  FDataset.FieldDefs.Add('MemoCol', ftMemo);
-  FDataset.FieldDefs.Add('FloatCol', ftFloat);
-  FDataset.FieldDefs.Add('DateCol', ftDate);
-  FDataset.FieldDefs.Add('BoolCol', ftBoolean);
-  FDataset.FieldDefs.Add('CurrencyCol', ftCurrency);
-  for i := 0 to FDataset.FieldDefs.Count-1 do
-    TsFieldDef(FDataset.FieldDefs[i]).Column := i;
+  FDataset.FieldDefs.Add('StringCol', ftString, 16);
+  *)
+  FDataset.AutoFieldDefs := AUTO_FIELD_DEFS;
+
+  if not AUTO_FIELD_DEFS then
+  begin
+    FDataset.FieldDefs.Add('AutoIncCol', ftAutoInc);
+    FDataset.FieldDefs.Add('IntCol', ftInteger);
+    FDataset.FieldDefs.Add('SmallIntCol', ftSmallInt);
+    FDataset.FieldDefs.Add('WordCol', ftWord);
+    FDataset.FieldDefs.Add('StringCol8', ftString, 8);
+    FDataset.FieldDefs.Add('StringCol16', ftString, 16);
+    FDataset.FieldDefs.Add('WideStringCol', ftWideString, 8);
+    FDataset.FieldDefs.Add('MemoCol', ftMemo);
+    FDataset.FieldDefs.Add('FloatCol', ftFloat);
+    FDataset.FieldDefs.Add('DateCol', ftDate);
+    FDataset.FieldDefs.Add('BoolCol', ftBoolean);
+    FDataset.FieldDefs.Add('CurrencyCol', ftCurrency);
+  end;
 
   FDataset.Open;
   DataSource1.Dataset := FDataset;
 
-  DBEdit1.Datafield := 'IntCol';
-  DBEdit2.DataField := 'StringCol3';
-  DBEdit3.Datafield := 'StringCol5';
+  DBEdit1.Datafield := FDataset.Fields[0].FieldName; //'IntCol';
+  DBEdit2.DataField := FDataset.Fields[1].FieldName; //'StringCol8';
+  DBEdit3.Datafield := FDataset.Fields[2].FieldName; //'StringCol16';
   DBEdit4.DataField := 'DateCol';
   DBCheckbox1.DataField := 'BoolCol';
   DBMemo1.Datafield := 'MemoCol';
@@ -122,6 +135,26 @@ begin
   cmbFields.ItemIndex := 0;
   cmbFilterFields.ItemIndex := 0;
 
+end;
+
+procedure Tform1.AfterOpenHandler(Dataset: TDataset);
+var
+  L: TStringList;
+  f: TField;
+begin
+  L := TStringList.Create;
+  try
+    for f in FDataset.Fields do
+      L.Add(Format('"%s": field type, %s, size %d, data size %d', [
+        f.FieldName,
+        GetEnumName(TypeInfo(TFieldType), integer(f.DataType)),
+        f.Size,
+        f.Datasize
+      ]));
+    Listbox1.Items.Assign(L);
+  finally
+    L.Free;
+  end;
 end;
 
 procedure TForm1.AfterScrollHandler(Dataset: TDataset);

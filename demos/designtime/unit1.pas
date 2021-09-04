@@ -5,8 +5,8 @@ unit Unit1;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, DBGrids, fpsDataset,
-  DB;
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, DBGrids, DBCtrls,
+  fpsDataset, DB;
 
 type
 
@@ -15,6 +15,7 @@ type
   TForm1 = class(TForm)
     DataSource1: TDataSource;
     DBGrid1: TDBGrid;
+    DBMemo1: TDBMemo;
     sWorksheetDataset1: TsWorksheetDataset;
     sWorksheetDataset1AutoIncCol: TLongintField;
     sWorksheetDataset1BoolCol: TBooleanField;
@@ -48,8 +49,9 @@ implementation
 
 procedure TForm1.FormCreate(Sender: TObject);
 begin
-  sWorksheetDataset1.FileName := 'D:\Prog_Lazarus\wp-git\FPSpreadsheetDataset\demos\TestData.xlsx';
+  sWorksheetDataset1.FileName := '..\TestData.xlsx';
   sWorksheetDataset1.Open;
+  DBMemo1.DataField := 'MemoCol';
 end;
 
 procedure TForm1.sWorksheetDataset1CalcFields(DataSet: TDataSet);
