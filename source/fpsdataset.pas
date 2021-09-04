@@ -1720,6 +1720,9 @@ begin
   end;
 end;
 
+{ Finds the field declared as AutoInc field.
+  Determines the starting value of the AutoInc counter by looking for the max
+  value in the AutoInc column. }
 procedure TsWorksheetDataset.SetupAutoInc;
 var
   f: TField;
@@ -1728,9 +1731,9 @@ var
   mx: Integer;
   cell: PCell;
 begin
-  // Search for autoinc field
   FAutoIncField := nil;
   FAutoIncValue := -1;
+
   for f in Fields do
     if f is TAutoIncField then
     begin
@@ -1738,9 +1741,14 @@ begin
       break;
     end;
 
+  // No AutoInc field found among FieldDefs.
   if FAutoIncField = nil then
     exit;
 
+  // Search for the maximum value in the autoinc column.
+  // Take care of blank and non-numeric cells - this should not happen but
+  // the spreadsheet file can be opened outside the db-aware application
+  // and modified there.
   mx := -MaxInt;
   c := ColIndexFromField(f);
   r := GetFirstDataRowIndex;
@@ -1762,7 +1770,7 @@ begin
     FAutoIncValue := mx + 1;
 end;
 
-
+{ Writes the buffer back to the worksheet. }
 procedure TsWorksheetDataset.WriteBufferToWorksheet(Buffer: TRecordBuffer);
 var
   row: TRowIndex;
