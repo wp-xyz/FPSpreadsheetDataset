@@ -42,13 +42,14 @@
 
   Issues
   * TStringField and TMemoField by default store strings using code page CP_ACP.
-    It should be UTF8 because FPSpreadsheet works this way. A conversion using
-    the TDataset.Translate method could be included but the problem is that
-    the field length cannot be fixed any more after initialization: a field set
-    to width 3 which receives the string 'äöü' from the workbook is displayed
-    only as 'ä' because each "character" is 2 bytes long and thus the string is
-    truncated after the 'ä'.
-    --> Workaround: Use fieldtype ftWideString instead!
+    Because FPSpreadsheet works this way these fields should be created with
+    CP_UTF8. However, such fields are created at max width because at worst a
+    UTF8 code-point need 4 bytes. This means that the max text width of a UTF8
+    cannot be controlled any more: when a field def is setup with Size=5 then
+    the user can enter 5*4=20 ASCII characters!
+
+    This does not happen for auto-detected text cells because they are created
+    as TWideStringField.
 
   * Manually deleting a fielddef removes it from the object tree, but not from
     the lfm file.
@@ -75,12 +76,15 @@ type
   { TsFieldDef }
   TsFieldDef = class(TFieldDef)
   private
-    FColumn: TColIndex;
+    FColIndex: TColIndex;
   public
     constructor Create(ACollection: TCollection); override;
+    constructor Create(AOwner: TFieldDefs; const AName: string;
+      ADataType: TFieldType; ASize: Integer; ARequired: Boolean; AFieldNo: Longint;
+      AColIndex: TColIndex; ACodePage: TSystemCodePage = CP_ACP); overload;
     procedure Assign(ASource: TPersistent); override;
   published
-    property Column: TColIndex read FColumn write FColumn default -1;
+    property ColIndex: TColIndex read FColIndex write FColIndex default -1;
   end;
 
   { TsFieldDefs }
@@ -305,13 +309,21 @@ end;
 constructor TsFieldDef.Create(ACollection: TCollection);
 begin
   inherited;
-  FColumn := -1;
+  FColIndex := -1;
+end;
+
+constructor TsFieldDef.Create(AOwner: TFieldDefs; const AName: string;
+  ADataType: TFieldType; ASize: Integer; ARequired: Boolean; AFieldNo: Longint;
+  AColIndex: TColIndex; ACodePage: TSystemCodePage = CP_ACP); overload;
+begin
+  inherited Create(AOwner, AName, ADataType, ASize, ARequired, AFieldNo, ACodePage);
+  FColIndex := AColIndex;
 end;
 
 procedure TsFieldDef.Assign(ASource: TPersistent);
 begin
   if ASource is TsFieldDef then
-    FColumn := TsFieldDef(ASource).FColumn;
+    FColIndex := TsFieldDef(ASource).FColIndex;
   inherited Assign(ASource);
 end;
 
@@ -576,7 +588,7 @@ var
 begin
   fieldDef := AField.FieldDef as TsFieldDef;
   if fieldDef <> nil then
-    Result := fieldDef.Column
+    Result := fieldDef.ColIndex
   else
     Result := -1;
 end;
@@ -628,7 +640,7 @@ begin
   for i := 0 to FieldDefs.Count-1 do
   begin
     fd := FieldDefs[i] as TsFieldDef;
-    FWorksheet.WriteText(0, fd.Column, fd.Name);
+    FWorksheet.WriteText(0, fd.ColIndex, fd.Name);
   end;
   FWorkbook.WriteToFile(FFileName, true);
 
@@ -691,9 +703,10 @@ begin
             ft := ftInteger;    // float will be checked further below
         cctUTF8String:
           ft := ftWideString;
-          // Create a widestring field rather than a string field because it is
-          // easier to control correct string length in case of non-ASCII chars.
-          // See "Issues" at the top of this unit.
+          // Handle text cells as widestring although the worksheet provides then
+          // as UTF8. The reason is that a UTF8 field has a datasize of 4*size+1
+          // to allow at worst 4-byte code-points. This makes it impossible to
+          // control the max text length of a field.
         cctDateTime:
           ft := ftDateTime; // ftDate, ftTime will be checked below
         cctBool:
@@ -768,12 +781,9 @@ begin
         ;
     end;
 
-    // Add field def and set its properties
-    fd := FieldDefs.AddFieldDef;
-    fd.Name := FixFieldName(fn);
-    fd.DataType := ft;
-    fd.Size := fs;
-    TsFieldDef(fd).Column := c;
+    // Add FieldDef and set its properties
+    TsFieldDef.Create(TsFieldDefs(FieldDefs), FixFieldName(fn), ft, fs,
+      false, FieldDefs.Count + 1, c, CP_UTF8);
   end;
 
   // Determine the offsets at which the field data will begin in the buffer.
