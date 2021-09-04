@@ -123,6 +123,7 @@ type
     FAutoIncValue: Integer;
     FAutoIncField: TAutoIncField;
   private
+    procedure FixFieldDefs;
     function FixFieldName(const AText: String): String;
     function GetActiveBuffer(out Buffer: TRecordBuffer): Boolean;
     function GetBookmarkCellFromRecNo(ARecNo: Integer): PCell;
@@ -134,6 +135,7 @@ type
     function GetRecordInfoPtr(Buffer: TRecordBuffer): PsRecordInfo;
     function GetRowIndexFromRecNo(ARecNo: Integer): TRowIndex;
     procedure SetCurrentRow(ARow: TRowIndex);
+
   protected
     // methods inherited from TDataset
     function AllocRecordBuffer: TRecordBuffer; override;
@@ -843,6 +845,30 @@ begin
   end;
 end;
 
+{ Fixes the column index in FieldDefs which is not assigned when FieldDefs are
+  added by code (FieldDefs.Add* is not virtual!) }
+procedure TsWorksheetDataset.FixFieldDefs;
+var
+  i: Integer;
+  isFirstZero: Boolean = true;
+  fd: TsFieldDef;
+begin
+  for i := 0 to FieldDefs.Count-1 do
+  begin
+    fd := TsFieldDef(FieldDefs[i]);
+    if (fd.ColIndex = 0) then
+    begin
+      if isFirstZero then
+        isFirstZero := false
+      else
+        fd.ColIndex := i;
+    end else
+    if (fd.ColIndex = -1) then
+      fd.ColIndex := i;
+  end;
+end;
+
+
 // Removes characters from AText which would make it an invalid fieldname.
 function TsWorksheetDataset.FixFieldName(const AText: String): String;
 var
@@ -1218,6 +1244,7 @@ end;
 { Initializes the field defs. }
 procedure TsWorksheetDataset.InternalInitFieldDefs;
 begin
+  FixFieldDefs;
   if FAutoFieldDefs and (FieldDefs.Count = 0) then
     DetectFieldDefs;
   CalcFieldOffsets;
