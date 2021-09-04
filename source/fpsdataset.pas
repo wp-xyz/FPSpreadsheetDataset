@@ -79,9 +79,10 @@ type
     FColIndex: TColIndex;
   public
     constructor Create(ACollection: TCollection); override;
-    constructor Create(AOwner: TFieldDefs; const AName: string;
-      ADataType: TFieldType; ASize: Integer; ARequired: Boolean; AFieldNo: Longint;
-      AColIndex: TColIndex; ACodePage: TSystemCodePage = CP_ACP); overload;
+    constructor Create(AOwner: TFieldDefs; const AName: string; ADataType: TFieldType;
+      ASize: Integer; ARequired: Boolean; AFieldNo: Longint; AColIndex: TColIndex
+      {$IF FPC_FullVersion >= 30200}; ACodePage: TSystemCodePage = CP_ACP{$IFEND}
+      ); overload;
     procedure Assign(ASource: TPersistent); override;
   published
     property ColIndex: TColIndex read FColIndex write FColIndex default -1;
@@ -317,9 +318,12 @@ end;
 
 constructor TsFieldDef.Create(AOwner: TFieldDefs; const AName: string;
   ADataType: TFieldType; ASize: Integer; ARequired: Boolean; AFieldNo: Longint;
-  AColIndex: TColIndex; ACodePage: TSystemCodePage = CP_ACP); overload;
+  AColIndex: TColIndex
+  {$IF FPC_FullVersion >= 30200}
+  ; ACodePage: TSystemCodePage = CP_ACP
+  {$IFEND}); overload;
 begin
-  inherited Create(AOwner, AName, ADataType, ASize, ARequired, AFieldNo, ACodePage);
+  inherited Create(AOwner, AName, ADataType, ASize, ARequired, AFieldNo{$IF FPC_FullVersion >= 30200}, ACodePage{$IFEND});
   FColIndex := AColIndex;
 end;
 
@@ -786,7 +790,7 @@ begin
 
     // Add FieldDef and set its properties
     TsFieldDef.Create(TsFieldDefs(FieldDefs), FixFieldName(fn), ft, fs,
-      false, FieldDefs.Count + 1, c, CP_UTF8);
+      false, FieldDefs.Count + 1, c{$IF FPC_FullVersion >= 30200}, CP_UTF8{$IFEND});
   end;
 
   // Determine the offsets at which the field data will begin in the buffer.
