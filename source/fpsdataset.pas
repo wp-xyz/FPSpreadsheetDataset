@@ -1749,12 +1749,17 @@ begin
     cell := FWorksheet.FindCell(r, c);
     if cell <> nil then
     begin
-      if (cell^.ContentType <> cctNumber) then
-        DatabaseError('AutoInc field must be a assigned to numeric cells.');
-      mx := Max(mx, round(FWorksheet.ReadAsNumber(cell)));
+      case cell^.ContentType of
+        cctNumber: mx := Max(mx, round(FWorksheet.ReadAsNumber(cell)));
+        cctEmpty: ;
+        else DatabaseError('AutoInc field must be a assigned to numeric cells.');
+      end;
     end;
-    FAutoIncValue := mx + 1;
   end;
+  if mx = -MaxInt then
+    FAutoIncvalue := 1
+  else
+    FAutoIncValue := mx + 1;
 end;
 
 
