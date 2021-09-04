@@ -1148,10 +1148,10 @@ begin
   inc(FLastRow);
   inc(FRecordCount);
   if DoAppend then
-    row := FLastRow
-  else
-    row := GetRowIndexFromRecNo(FRecNo);
-  FWorksheet.InsertRow(row);
+  begin
+    row := FLastRow;
+    SetCurrentRow(row);
+  end;
   WriteBufferToWorksheet(Buffer);
   FModified := true;
 end;
