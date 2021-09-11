@@ -20,7 +20,9 @@ type
     btnSetBookmark: TButton;
     btnGoToBookmark: TButton;
     btnAppend: TButton;
+    Button1: TButton;
     Button2: TButton;
+    Button3: TButton;
     cbFilter: TCheckBox;
     CheckBox1: TCheckBox;
     cmbFields: TComboBox;
@@ -46,6 +48,7 @@ type
     procedure btnGoToBookmarkClick(Sender: TObject);
     procedure btnLookupClick(Sender: TObject);
     procedure btnSetBookmarkClick(Sender: TObject);
+    procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure cbFilterChange(Sender: TObject);
     procedure CheckBox1Change(Sender: TObject);
@@ -311,6 +314,11 @@ end;
 procedure TForm1.btnSetBookmarkClick(Sender: TObject);
 begin
   FBookmark := FDataset.GetBookmark;
+end;
+
+procedure TForm1.Button1Click(Sender: TObject);
+begin
+  FDataset.SortOnFields('IntCol', [false], [Sender = Button1]);
 end;
 
 procedure TForm1.Button2Click(Sender: TObject);

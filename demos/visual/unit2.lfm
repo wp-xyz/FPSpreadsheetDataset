@@ -327,6 +327,26 @@ object Form1: TForm1
     ItemHeight = 0
     TabOrder = 22
   end
+  object Button1: TButton
+    Left = 56
+    Height = 25
+    Top = 400
+    Width = 121
+    AutoSize = True
+    Caption = 'Sort by IntCol, asc'
+    OnClick = Button1Click
+    TabOrder = 23
+  end
+  object Button3: TButton
+    Left = 184
+    Height = 25
+    Top = 400
+    Width = 128
+    AutoSize = True
+    Caption = 'Sort by IntCol, desc'
+    OnClick = Button1Click
+    TabOrder = 24
+  end
   object DataSource1: TDataSource
     Left = 512
     Top = 64

@@ -16,7 +16,7 @@
 
   Much of the code is adapted from TMemDataset.
 
-  Current status (Sept 04, 2021):
+  Current status (Sept 12, 2021):
 
   Working
   * Field defs: determined automatically from file
@@ -32,11 +32,11 @@
   * GetBookmark, GotoBookmark: working
   * Filtering by OnFilter event and by Filter property: working.
   * Persistent and calculated fields working
+  * Sorting by method SortByFields
 
   Planned but not yet working
   ' Field defs: Required, Unique etc possibly not supported ATM - to be tested
-  * Indexes: not implemented
-  * Sorting: not implemented
+  * IndexDefs: not implemented
 
   Issues
   * TStringField and TMemoField by default store strings using code page CP_ACP.
@@ -63,13 +63,15 @@ unit fpsDataset;
 interface
 
 uses
-  Classes, SysUtils, DB, BufDataset_Parser,
+  Classes, SysUtils, Contnrs, DB, BufDataset_Parser,
   fpSpreadsheet, fpsTypes, fpsUtils, fpsAllFormats;
 
 type
   TRowIndex = Int64;
   TColIndex = Int64;
   PPCell = ^PCell;
+
+  TsBooleanArray = array of Boolean;
 
   { TsFieldDef }
   TsFieldDef = class(TFieldDef)
@@ -99,6 +101,15 @@ type
   end;
   PsRecordInfo = ^TsRecordInfo;
 
+  TsIndexOption = (siDescending, siCaseInsensitive);
+  TsIndexOptions = set of TsIndexOption;
+
+  { TsIndexItem }
+  TsIndexItem = class
+    Field: TField;
+    Options: TsIndexOptions;
+  end;
+
   { TsWorksheetDataset }
   TsWorksheetDataset = class(TDataset)
   private
@@ -109,6 +120,7 @@ type
     FRecNo: Integer;                 // Current record number
     FFirstRow: TRowIndex;            // WorksheetIndex of the first record
     FLastRow: TRowIndex;             // Worksheet index of the last record
+    FLastCol: TColIndex;             // Worksheet index of the last column
     FRecordCount: Integer;           // Number of records between first and last data rows
     FRecordBufferSize: Integer;      // Size of the record buffer
     FTotalFieldSize: Integer;        // Total size of the field data
@@ -121,9 +133,13 @@ type
     FParser: TBufDatasetParser;
     FAutoIncValue: Integer;
     FAutoIncField: TAutoIncField;
+    FSortParams: TsSortParams;
   private
+    procedure CreateSortParams(const FieldNames: string;
+      const CaseSensitive, Ascending: array of boolean);
     procedure FixFieldDefs;
 //    function FixFieldName(const AText: String): String;
+    procedure FreeSortParams;
     function GetActiveBuffer(out Buffer: TRecordBuffer): Boolean;
     function GetBookmarkCellFromRecNo(ARecNo: Integer): PCell;
     function GetCurrentRowIndex: TRowIndex;
@@ -166,6 +182,7 @@ type
     procedure SetFiltered(Value: Boolean); override;
     procedure SetFilterText(const Value: String); override;
     procedure SetRecNo(Value: Integer); override;
+
     // new methods
     procedure AllocBlobPointers(Buffer: TRecordBuffer);
     procedure CalcFieldOffsets;
@@ -180,6 +197,7 @@ type
       Options: TLocateOptions; out ARecNo: integer): Boolean;
     procedure ParseFilter(const AFilter: STring);
     procedure SetupAutoInc;
+    procedure Sort;
     procedure WriteBufferToWorksheet(Buffer: TRecordBuffer);
 
   public
@@ -198,13 +216,11 @@ type
       const ResultFields: String): Variant; override;
     procedure SetFieldData(Field: TField; Buffer: Pointer); override;
 
-    property Modified: boolean read FModified;
+    procedure SortOnFields(const FieldNames: string;
+      const CaseSensitive: TsBooleanArray = nil;
+      const Ascending: TsBooleanArray = nil);
 
-  // This section is to be removed after debugging.
-  public
-    // to be removed
-    property Buffers;
-    property BufferCount;
+    property Modified: boolean read FModified;
 
   published
     property AutoFieldDefs: Boolean read FAutoFieldDefs write FAutoFieldDefs default true;
@@ -254,12 +270,12 @@ implementation
 uses
   LazUTF8, LazUTF16, Math, TypInfo, Variants, fpsNumFormat;
 
-procedure Register;
-begin
-  RegisterComponents('Data Access', [
-    TsWorksheetDataset
-  ]);
-end;
+const
+  ftSupported = [ftString, ftSmallint, ftInteger, ftWord, ftBoolean, ftFloat,
+    {ftCurrency,} ftDate, ftTime, ftDateTime, ftAutoInc, {ftBCD, ftBytes,
+    ftVarBytes, ftADT,} ftFixedChar, ftWideString, ftLargeint, {ftVariant, ftGuid] +
+    ftBlobTypes;}
+    ftMemo];
 
 
 { Null mask handling
@@ -621,6 +637,37 @@ begin
   Result := TsBlobStream.Create(Field as TBlobField, Mode);
 end;
 
+procedure TsWorksheetDataset.CreateSortParams(const FieldNames: string;
+  const CaseSensitive, Ascending: array of boolean);
+var
+  field_names: TStringArray;
+  field: TField;
+  i: Integer;
+begin
+  if pos(';', FieldNames) > 0 then
+    field_names := FieldNames.Split(';')
+  else if pos(',', FieldNames) > 0 then
+    field_names := FieldNames.Split(',')
+  else
+  begin
+    SetLength(field_names, 1);
+    field_names[0] := FieldNames;
+  end;
+
+  FSortParams := InitSortParams(true, Length(field_names));
+  for i := 0 to High(field_names) do
+  begin
+    field := FieldByName(field_names[i]);
+    if not (field.DataType in (ftSupported - [ftMemo])) then
+      DatabaseError(Format('Type of field "%s" not supported.', [field_names[i]]));
+    FSortParams.Keys[i].ColRowIndex := ColIndexFromField(field);
+    if (i < Length(CaseSensitive)) and not CaseSensitive[i] then
+      Include(FSortParams.Keys[i].Options, ssoCaseInsensitive);
+    if (i < Length(Ascending)) and not Ascending[i] then
+      Include(FSortParams.Keys[i].Options, ssoDescending);
+  end;
+end;
+
 { Creates a new table, i.e. a new empty worksheet based on the given FieldDefs
   The field names are written to the first row of the worksheet. }
 procedure TsWorksheetDataset.CreateTable;
@@ -908,6 +955,11 @@ procedure TsWorksheetDataset.FreeRecordBuffer(var Buffer: TRecordBuffer);
 begin
   FreeBlobPointers(Buffer);
   FreeMem(Buffer);
+end;
+
+procedure TsWorksheetDataset.FreeSortParams;
+begin
+  FSortParams.Keys := nil;
 end;
 
 procedure TsWorksheetDataset.FreeWorkbook;
@@ -1288,6 +1340,7 @@ begin
         DatabaseError('Worksheet not found.');
     end;
 
+    FLastCol := FWorksheet.GetLastColIndex(true);
     FFirstRow := FWorksheet.GetFirstRowIndex(true);
     FLastRow := FWorksheet.GetLastOccupiedRowIndex;
     FRecordCount := -1;
@@ -1809,6 +1862,37 @@ begin
     FAutoIncValue := mx + 1;
 end;
 
+procedure TsWorksheetDataset.Sort;
+const
+  firstCol = 0;
+begin
+  FWorksheet.Sort(FSortParams, GetFirstDataRowIndex, firstCol, GetLastDataRowIndex, FLastCol);
+end;
+
+procedure TsWorksheetDataset.SortOnFields(const FieldNames: string;
+  const CaseSensitive: TsBooleanArray = nil;
+  const Ascending: TsBooleanArray = nil);
+var
+  bm: TBookmark;
+begin
+  bm := GetBookmark;
+  try
+    DisableControls;
+    try
+      CreateSortParams(FieldNames, CaseSensitive, Ascending);
+      Sort;
+      FModified := true;
+//      RecalcBufListSize;
+    finally
+      EnableControls;
+    end;
+    GotoBookmark(bm);
+  finally
+    FreeBookmark(bm);
+  end;
+  Resync([]);
+end;
+
 { Writes the buffer back to the worksheet. }
 procedure TsWorksheetDataset.WriteBufferToWorksheet(Buffer: TRecordBuffer);
 var
@@ -1880,6 +1964,14 @@ begin
     end;
   end;
   FModified := true;
+end;
+
+
+procedure Register;
+begin
+  RegisterComponents('Data Access', [
+    TsWorksheetDataset
+  ]);
 end;
 
 
