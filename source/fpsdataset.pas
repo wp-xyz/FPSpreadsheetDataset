@@ -207,6 +207,8 @@ type
       const ResultFields: String): Variant; override;
     procedure SetFieldData(Field: TField; Buffer: Pointer); override;
 
+    procedure SortOnField(const FieldName: string;
+      const Options: TsSortOptions = []);
     procedure SortOnFields(const FieldNames: string;
       const Options: TsSortOptionsArray = nil);
 
@@ -260,12 +262,23 @@ implementation
 uses
   LazUTF8, LazUTF16, Math, TypInfo, Variants, fpsNumFormat;
 
-const
-  ftSupported = [ftString, ftSmallint, ftInteger, ftWord, ftBoolean, ftFloat,
-    {ftCurrency,} ftDate, ftTime, ftDateTime, ftAutoInc, {ftBCD, ftBytes,
-    ftVarBytes, ftADT,} ftFixedChar, ftWideString, ftLargeint, {ftVariant, ftGuid] +
-    ftBlobTypes;}
-    ftMemo];
+const  // This are the field types of FPC 3.3.x
+  ftSupported = [ftString, ftSmallint, ftInteger, ftWord,ftBoolean, ftFloat,
+    {ftCurrency, ftBCD, } ftDate,  ftTime, ftDateTime,
+    {ftBytes, ftVarBytes, }ftAutoInc, ftBlob, ftMemo,
+    {ftGraphic, ftFmtMemo, ftParadoxOle, ftDBaseOle, ftTypedBinary, ftCursor, }
+    ftFixedChar, ftWideString, ftLargeint,
+    {ftADT, ftArray, ftReference, ftDataSet, ftOraBlob, ftOraClob, ftVariant,
+    ftInterface, ftIDispatch, ftGuid, ftTimeStamp, ftFMTBcd, }
+    ftFixedWideChar, ftWideMemo
+    {
+    , ftOraTimeStamp, ftOraInterval, ftLongWord, ftShortint,
+    }
+    {$IF FPC_FullVersion >= 30300}
+    , ftByte
+    {$IFEND}
+    {, ftExtended}
+  ];
 
 
 { Null mask handling
@@ -539,7 +552,7 @@ begin
         fs := (FieldDefs[i].Size + 1) * 2;
       ftInteger, ftAutoInc:
         fs := SizeOf(Integer);
-      {$IF FPC_FullVersion >= 30202}
+      {$IF FPC_FullVersion >= 30300}
       ftByte:
         fs := SizeOf(Byte);
       {$IFEND}
@@ -648,7 +661,7 @@ begin
   for i := 0 to High(field_names) do
   begin
     field := FieldByName(field_names[i]);
-    if not (field.DataType in (ftSupported - [ftMemo])) then
+    if not (field.DataType in (ftSupported - [ftMemo, ftWideMemo])) then
       DatabaseError(Format('Type of field "%s" not supported.', [field_names[i]]));
     FSortParams.Keys[i].ColRowIndex := ColIndexFromField(field);
     if i < Length(Options) then
@@ -1483,7 +1496,7 @@ begin
               if field.DataType = ftAutoInc then
                 FAutoIncField := TAutoIncField(field);
             end;
-          {$IF FPC_FullVersion >= 30202}
+          {$IF FPC_FullVersion >= 30301}
           ftByte:
             begin
               b := byte(round(cell^.NumberValue));
@@ -1857,6 +1870,28 @@ begin
   FWorksheet.Sort(FSortParams, GetFirstDataRowIndex, firstCol, GetLastDataRowIndex, FLastCol);
 end;
 
+procedure TsWorksheetDataset.SortOnField(const FieldName: String;
+  const Options: TsSortOptions = []);
+var
+  bm: TBookmark;
+begin
+  bm := GetBookmark;
+  try
+    DisableControls;
+    try
+      CreateSortParams(FieldName, [Options]);
+      Sort;
+      FModified := true;
+    finally
+      EnableControls;
+    end;
+  finally
+    GotoBookmark(bm);
+    FreeBookmark(bm);
+  end;
+  Resync([]);
+end;
+
 procedure TsWorksheetDataset.SortOnFields(const FieldNames: string;
   const Options: TsSortOptionsArray = nil);
 var
@@ -1911,7 +1946,7 @@ begin
           FWorksheet.WriteCurrency(cell, PDouble(P)^, nfCurrency, 2);
         ftInteger, ftAutoInc:
           FWorksheet.WriteNumber(cell, PInteger(P)^);
-        {$IF FPC_FullVersion >= 30202}
+        {$IF FPC_FullVersion >= 30300}
         ftByte:
           FWorksheet.WriteNumber(cell, PByte(P)^);
         {$IFEND}
