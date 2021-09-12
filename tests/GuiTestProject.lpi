@@ -41,6 +41,11 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="ReadFieldsTest"/>
       </Unit>
+      <Unit>
+        <Filename Value="sorttestunit.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="SortTestUnit"/>
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

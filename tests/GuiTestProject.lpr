@@ -3,7 +3,7 @@ program GuiTestProject;
 {$mode objfpc}{$H+}
 
 uses
-  Interfaces, Forms, GuiTestRunner, ReadFieldsTest;
+  Interfaces, Forms, GuiTestRunner, ReadFieldsTest, sorttestunit;
 
 {$R *.res}
 
