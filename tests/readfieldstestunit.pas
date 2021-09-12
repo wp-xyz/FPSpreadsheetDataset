@@ -1,4 +1,4 @@
-unit ReadFieldsTest;
+unit ReadFieldsTestUnit;
 
 {$mode objfpc}{$H+}
 
