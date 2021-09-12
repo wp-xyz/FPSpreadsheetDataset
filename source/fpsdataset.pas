@@ -32,22 +32,15 @@
   * GetBookmark, GotoBookmark: working
   * Filtering by OnFilter event and by Filter property: working.
   * Persistent and calculated fields working
-  * Sorting by method SortByFields
+  * Sorting by method SortOnFields
 
   Planned but not yet working
   ' Field defs: Required, Unique etc possibly not supported ATM - to be tested
   * IndexDefs: not implemented
 
   Issues
-  * TStringField and TMemoField by default store strings using code page CP_ACP.
-    Because FPSpreadsheet works this way these fields should be created with
-    CP_UTF8. However, such fields are created at max width because at worst a
-    UTF8 code-point need 4 bytes. This means that the max text width of a UTF8
-    cannot be controlled any more: when a field def is setup with Size=5 then
-    the user can enter 5*4=20 ASCII characters!
-
-    This does not happen for auto-detected text cells because they are created
-    as TWideStringField.
+  * Text cells should be converted to text fields in UTF8 encoding. However,
+    TField supports codepages only in FPC 3.2+.
 
   * Manually deleting a fielddef removes it from the object tree, but not from
     the lfm file.
@@ -547,6 +540,12 @@ begin
   begin
     case FieldDefs[i].DataType of
       ftString, ftFixedChar:
+      {$IF FPC_FullVersion >= 30200}
+        if FieldDefs[i].Codepage = CP_UTF8 then
+          fs := FieldDefs[i].Size*4 + 1
+          // a UTF8 char point requires 1-4 bytes - we must reserve the maximum!
+        else
+      {$IFEND}
         fs := FieldDefs[i].Size + 1;  // +1 for zero termination
       ftWideString, ftFixedWideChar:
         fs := (FieldDefs[i].Size + 1) * 2;
@@ -755,11 +754,7 @@ begin
           else
             ft := ftInteger;    // float will be checked further below
         cctUTF8String:
-          ft := ftWideString;
-          // Handle text cells as widestring although the worksheet provides then
-          // as UTF8. The reason is that a UTF8 field has a datasize of 4*size+1
-          // to allow at worst 4-byte code-points. This makes it impossible to
-          // control the max text length of a field.
+          ft := ftString;
         cctDateTime:
           ft := ftDateTime; // ftDate, ftTime will be checked below
         cctBool:
@@ -773,7 +768,7 @@ begin
     // Determine field size and distinguish between similar field types
     fs := 0;
     case ft of
-      ftWideString:
+      ftString:
         begin
           // Find longest text in column...
           for r := GetFirstDataRowIndex to GetLastDataRowIndex do

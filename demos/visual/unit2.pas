@@ -254,6 +254,7 @@ begin
     else
     if field is TFloatField then
       FDataset.OnFilterRecord := @FilterRecord_Float;
+    FDataset.Filter := '';
   end
   else
     FDataset.OnFilterRecord := nil;
