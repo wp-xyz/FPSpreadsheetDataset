@@ -674,7 +674,6 @@ procedure TsWorksheetDataset.CreateTable;
 var
   i: Integer;
   fd: TsFieldDef;
-  noWorkbook: Boolean;
 begin
   CheckInactive;
   Clear(false);    // false = do not clear FieldDefs
@@ -682,12 +681,11 @@ begin
   if FAutoIncValue < 0 then
     FAutoIncValue := 1;
 
-  noWorkbook := (FWorkbook = nil);
-  if noWorkbook then
-  begin
-    FWorkbook := TsWorkbook.Create;
-    FWorkSheet := FWorkbook.AddWorksheet(FSheetName);
-  end;
+  if FileExists(FFileName) then
+    exit;
+
+  FWorkbook := TsWorkbook.Create;
+  FWorkSheet := FWorkbook.AddWorksheet(FSheetName);
 
   for i := 0 to FieldDefs.Count-1 do
   begin
@@ -696,11 +694,8 @@ begin
   end;
   FWorkbook.WriteToFile(FFileName, true);
 
-  if noWorkbook then
-  begin
-    FreeAndNil(FWorkbook);
-    FWorksheet := nil;
-  end;
+  FreeAndNil(FWorkbook);
+  FWorksheet := nil;
 
   FTableCreated := true;
 end;
