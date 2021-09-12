@@ -6,7 +6,8 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, DB, DBGrids, ComCtrls,
-  Menus, ExtCtrls, DBCtrls, StdCtrls, Buttons, ActnList, fpsTypes, fpsDataset;
+  Menus, ExtCtrls, DBCtrls, StdCtrls, Buttons, ActnList, StdActns, fpsTypes,
+  fpsDataset;
 
 type
 
@@ -19,6 +20,7 @@ type
     DataSource: TDataSource;
     DBGrid: TDBGrid;
     DBNavigator1: TDBNavigator;
+    acFileExit: TFileExit;
     ImageList: TImageList;
     RecordInfo: TLabel;
     MenuItem1: TMenuItem;
@@ -28,6 +30,7 @@ type
     btnFilter: TSpeedButton;
     btnClearFilter: TSpeedButton;
     Dataset: TsWorksheetDataset;
+    SpeedButton1: TSpeedButton;
     procedure AcFilterExecute(Sender: TObject);
     procedure AcFilterUpdate(Sender: TObject);
     procedure AcResetFilterUpdate(Sender: TObject);
