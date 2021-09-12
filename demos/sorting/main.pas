@@ -6,29 +6,36 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, DB, DBGrids, ComCtrls,
-  Menus, ExtCtrls, DBCtrls, StdCtrls, fpsTypes, fpsDataset;
+  Menus, ExtCtrls, DBCtrls, StdCtrls, Buttons, ActnList, fpsTypes, fpsDataset;
 
 type
 
   { TForm1 }
 
   TForm1 = class(TForm)
-    DataSource1: TDataSource;
-    DBGrid1: TDBGrid;
+    AcFilter: TAction;
+    AcResetFilter: TAction;
+    ActionList: TActionList;
+    DataSource: TDataSource;
+    DBGrid: TDBGrid;
     DBNavigator1: TDBNavigator;
-    ImageList1: TImageList;
+    ImageList: TImageList;
     RecordInfo: TLabel;
     MenuItem1: TMenuItem;
     MenuItem2: TMenuItem;
     Panel1: TPanel;
-    PopupMenu1: TPopupMenu;
-    sWorksheetDataset1: TsWorksheetDataset;
-    procedure DBGrid1TitleClick(Column: TColumn);
+    GridPopup: TPopupMenu;
+    btnFilter: TSpeedButton;
+    btnClearFilter: TSpeedButton;
+    Dataset: TsWorksheetDataset;
+    procedure AcFilterExecute(Sender: TObject);
+    procedure AcFilterUpdate(Sender: TObject);
+    procedure AcResetFilterUpdate(Sender: TObject);
+    procedure AcResetFilterExecute(Sender: TObject);
+    procedure DBGridTitleClick(Column: TColumn);
     procedure FormCreate(Sender: TObject);
-    procedure MenuItem1Click(Sender: TObject);
-    procedure MenuItem2Click(Sender: TObject);
-    procedure sWorksheetDataset1AfterOpen(DataSet: TDataSet);
-    procedure sWorksheetDataset1AfterScroll(DataSet: TDataSet);
+    procedure DatasetAfterClose({%H-}ADataSet: TDataSet);
+    procedure DatasetAfterScroll({%H-}ADataSet: TDataSet);
   private
     FSortColumn: TColumn;
     FFilterField: TField;
@@ -52,32 +59,7 @@ uses
 
 { TForm1 }
 
-procedure TForm1.FilterRecord(ADataSet: TDataSet; var Accept: Boolean);
-begin
-  Accept := FFilterField.AsString = FFilterText;
-end;
-
-procedure TForm1.FormCreate(Sender: TObject);
-var
-  f: TField;
-begin
-  // Open the spreadsheet file as dataset.
-  sWorksheetDataset1.FileName := 'PlantList.xls';
-  sWorksheetDataset1.Open;
-
-  // Avoid too many decimal places in floating point fields.
-  for f in sWorksheetDataset1.Fields do
-    if (f is TFloatField) then
-      TFloatField(f).DisplayFormat := '0.###';
-end;
-
-procedure TForm1.MenuItem1Click(Sender: TObject);
-begin
-  sWorksheetDataset1.Filtered := false;
-  sWorksheetDataset1.OnFilterRecord := nil;
-end;
-
-procedure TForm1.MenuItem2Click(Sender: TObject);
+procedure TForm1.AcFilterExecute(Sender: TObject);
 
   procedure GetFieldValues(ADataset: TDataset; AField: TField; AList: TStrings);
   var
@@ -112,30 +94,30 @@ var
   P: TPoint;
   F: TListboxForm;
 begin
-  sWorksheetDataset1.OnFilterRecord := nil;
-  sWorksheetDataset1.Filtered := false;
+  Dataset.OnFilterRecord := nil;
+  Dataset.Filtered := false;
 
-  if DBGrid1.SelectedColumn = nil then
+  if DBGrid.SelectedColumn = nil then
   begin
     ShowMessage('No column selected.');
     exit;
   end;
 
-  FFilterField := DBGrid1.SelectedColumn.Field;
+  FFilterField := DBGrid.SelectedColumn.Field;
   FFilterText := FFilterField.AsString;
 
   F := TListboxForm.Create(nil);
   try
     F.Caption := 'Filter';
     F.Prompt.Caption := FFilterField.FieldName + ' matches...';
-    GetFieldValues(sWorksheetDataset1, FFilterField, F.Listbox.Items);
+    GetFieldValues(Dataset, FFilterField, F.Listbox.Items);
     F.Listbox.ItemIndex := F.Listbox.Items.IndexOf(FFilterText);
     if F.ShowModal = mrOK then
     begin
       FFilterText := F.Listbox.Items[F.Listbox.ItemIndex];
-      sWorksheetDataset1.Filtered := false;
-      sWorksheetDataset1.OnFilterRecord := @FilterRecord;
-      sWorksheetDataset1.Filtered := true;
+      Dataset.Filtered := false;
+      Dataset.OnFilterRecord := @FilterRecord;
+      Dataset.Filtered := true;
       UpdateRecordInfo;
     end;
   finally
@@ -143,29 +125,40 @@ begin
   end;
 end;
 
-procedure TForm1.sWorksheetDataset1AfterOpen(DataSet: TDataSet);
+procedure TForm1.AcFilterUpdate(Sender: TObject);
+begin
+  AcFilter.Enabled := Dataset.Active and
+    not (Dataset.State in dsEditModes);
+end;
+
+procedure TForm1.AcResetFilterExecute(Sender: TObject);
+begin
+  Dataset.Filtered := false;
+  Dataset.OnFilterRecord := nil;
+end;
+
+procedure TForm1.AcResetFilterUpdate(Sender: TObject);
+begin
+  AcResetFilter.Enabled := Dataset.Active and
+    not (Dataset.State in dsEditModes) and
+    Dataset.Filtered;
+end;
+
+procedure TForm1.DatasetAfterScroll(ADataSet: TDataSet);
 begin
   UpdateRecordInfo;
 end;
 
-procedure TForm1.sWorksheetDataset1AfterScroll(DataSet: TDataSet);
+procedure TForm1.DatasetAfterClose(ADataSet: TDataSet);
 begin
-  UpdateRecordInfo;
-end;
-
-procedure TForm1.UpdateRecordInfo;
-begin
-  RecordInfo.Caption := Format('Record %d of %d (relative to unfiltered dataset)', [
-    sWorksheetDataset1.RecNo,
-    sWorksheetDataset1.RecordCount
-  ]);
+  RecordInfo.Caption := '(dataset closed)';
 end;
 
 { Sorts the grid (and worksheet) when a grid header is clicked. A sort indicator
   image is displayed at the right of the column title. Requires an ImageList
   assigned to the grid's TitleImageList having the image for ascending and
   descending sorts at index 0 and 1, respectively. }
-procedure TForm1.DBGrid1TitleClick(Column: TColumn);
+procedure TForm1.DBGridTitleClick(Column: TColumn);
 var
   options: TsSortOptions;
 begin
@@ -191,8 +184,36 @@ begin
   end;
 
   // Execute the sorting operation.
-  sWorksheetDataset1.SortOnField(FSortColumn.Field.FieldName, options);
+  Dataset.SortOnField(FSortColumn.Field.FieldName, options);
 end;
+
+procedure TForm1.FilterRecord(ADataSet: TDataSet; var Accept: Boolean);
+begin
+  Accept := FFilterField.AsString = FFilterText;
+end;
+
+procedure TForm1.FormCreate(Sender: TObject);
+var
+  f: TField;
+begin
+  // Open the spreadsheet file as dataset.
+  Dataset.FileName := 'PlantList.xls';
+  Dataset.Open;
+
+  // Avoid too many decimal places in floating point fields.
+  for f in Dataset.Fields do
+    if (f is TFloatField) then
+      TFloatField(f).DisplayFormat := '0.###';
+end;
+
+procedure TForm1.UpdateRecordInfo;
+begin
+  RecordInfo.Caption := Format('Record %d of %d (relative to unfiltered dataset)', [
+    Dataset.RecNo,
+    Dataset.RecordCount
+  ]);
+end;
+
 
 end.
 
