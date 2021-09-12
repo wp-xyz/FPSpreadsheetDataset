@@ -1,0 +1,121 @@
+object Form1: TForm1
+  Left = 285
+  Height = 390
+  Top = 131
+  Width = 1024
+  Caption = 'Click on a column header to sort the grid. Or right-click to filter.'
+  ClientHeight = 390
+  ClientWidth = 1024
+  OnCreate = FormCreate
+  LCLVersion = '2.3.0.0'
+  object DBGrid1: TDBGrid
+    Left = 0
+    Height = 365
+    Top = 25
+    Width = 1024
+    Align = alClient
+    AlternateColor = clGradientInactiveCaption
+    Color = clWindow
+    Columns = <>
+    DataSource = DataSource1
+    Options = [dgEditing, dgTitles, dgIndicator, dgColumnResize, dgColumnMove, dgRowLines, dgTabs, dgAlwaysShowSelection, dgConfirmDelete, dgCancelOnExit, dgAnyButtonCanSelect]
+    PopupMenu = PopupMenu1
+    TabOrder = 0
+    TitleImageList = ImageList1
+    OnTitleClick = DBGrid1TitleClick
+  end
+  object Panel1: TPanel
+    Left = 0
+    Height = 25
+    Top = 0
+    Width = 1024
+    Align = alTop
+    AutoSize = True
+    BevelOuter = bvNone
+    ClientHeight = 25
+    ClientWidth = 1024
+    TabOrder = 1
+    object DBNavigator1: TDBNavigator
+      AnchorSideLeft.Control = Panel1
+      AnchorSideTop.Control = Panel1
+      Left = 0
+      Height = 25
+      Top = 0
+      Width = 241
+      BevelOuter = bvNone
+      ChildSizing.EnlargeHorizontal = crsScaleChilds
+      ChildSizing.EnlargeVertical = crsScaleChilds
+      ChildSizing.ShrinkHorizontal = crsScaleChilds
+      ChildSizing.ShrinkVertical = crsScaleChilds
+      ChildSizing.Layout = cclLeftToRightThenTopToBottom
+      ChildSizing.ControlsPerLine = 100
+      ClientHeight = 25
+      ClientWidth = 241
+      DataSource = DataSource1
+      Options = []
+      TabOrder = 0
+    end
+    object RecordInfo: TLabel
+      AnchorSideLeft.Control = DBNavigator1
+      AnchorSideLeft.Side = asrBottom
+      Left = 247
+      Height = 15
+      Top = 7
+      Width = 58
+      BorderSpacing.Left = 6
+      Caption = 'RecordInfo'
+    end
+  end
+  object sWorksheetDataset1: TsWorksheetDataset
+    FieldDefs = <>
+    AfterOpen = sWorksheetDataset1AfterOpen
+    AfterScroll = sWorksheetDataset1AfterScroll
+    Left = 136
+    Top = 40
+  end
+  object DataSource1: TDataSource
+    DataSet = sWorksheetDataset1
+    Left = 136
+    Top = 96
+  end
+  object ImageList1: TImageList
+    Scaled = True
+    Left = 136
+    Top = 168
+    Bitmap = {
+      4C7A020000001000000010000000700000000000000078DAFBFFFF3FC37F1A61
+      A7495EFF41985CBD597B8BC0981433149294D9607A27BF9805C630336CBA9CD9
+      88B517A617DD0C62FC0BC330BDE8E2C4FA1F593F39E137AA7F68EB2735CD0C26
+      4CA9FB47E37FE4E9A746F94949F90DC2A03A0257FD01AA5B685D7F51ABFE2416
+      030054FAB260
+    }
+    BitmapAdv = {
+      4C69020000004C7A020000001800000018000000B00000000000000078DAFBFF
+      FF3FC3FF41809D267981F07F10A691F9FFB3F6168131B5ED80993DF9C52C30A6
+      861D0A49CAF03041361BDD0E9B2E67061026C37C365C6663B383D230216407A9
+      E98418B3C9B1039606D131BA99B8D4919B7EB0994FCDF4396AFEA8F9A3E68F9A
+      4F4A99F77F90B40D46F1E08EDFD1FC356AFEA8F9A3E6D3C37C7AB4CFC9ED5F80
+      FA2603DD3F8261509F8DD8FE1DA82F488EF9F8EC400E13505F76B0F5AFE9393E
+      8025ED0E9AB60100ED0AF6334C7A020000002000000020000000D30000000000
+      000078DAEDD9410AC2301085E1AE7A0EA1D770A53B8FD1A54B8FE15277DEA5F7
+      F116CA140A129AD484C94C947F6096E57BB44D68275D4795D6E1767A497BD9E7
+      E932B77586C5BE3F1F735B66086DCB0C31BB6686DD38F4D25B7698617F3DF6D2
+      1AFEB7F65A86DAF7BCE6B328B535322C7BCB5AC7BCD4359976AAB7FCE8B55A6B
+      30E55BEC3FF8F8F8F8F8F8F8F6BED6770E45FDDAFBC7FAC7C7C7C7C7C7FF4FBF
+      85F99BE7FCB185F96B0BF3672999A197CEDF6576AFE1E764F8B435FC9C67E179
+      06E47906E67906E861877B147FA5E5F5068FB5A754
+    }
+  end
+  object PopupMenu1: TPopupMenu
+    Left = 336
+    Top = 40
+    object MenuItem1: TMenuItem
+      Caption = 'Reset filter'
+      OnClick = MenuItem1Click
+    end
+    object MenuItem2: TMenuItem
+      Caption = 'Filter by...'
+      OnClick = MenuItem2Click
+    end
+  end
+end
