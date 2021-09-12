@@ -71,7 +71,7 @@ type
   TColIndex = Int64;
   PPCell = ^PCell;
 
-  TsBooleanArray = array of Boolean;
+  TsSortOptionsArray = array of TsSortOptions;
 
   { TsFieldDef }
   TsFieldDef = class(TFieldDef)
@@ -101,15 +101,6 @@ type
   end;
   PsRecordInfo = ^TsRecordInfo;
 
-  TsIndexOption = (siDescending, siCaseInsensitive);
-  TsIndexOptions = set of TsIndexOption;
-
-  { TsIndexItem }
-  TsIndexItem = class
-    Field: TField;
-    Options: TsIndexOptions;
-  end;
-
   { TsWorksheetDataset }
   TsWorksheetDataset = class(TDataset)
   private
@@ -136,7 +127,7 @@ type
     FSortParams: TsSortParams;
   private
     procedure CreateSortParams(const FieldNames: string;
-      const CaseSensitive, Ascending: array of boolean);
+      const Options: TsSortOptionsArray);
     procedure FixFieldDefs;
 //    function FixFieldName(const AText: String): String;
     procedure FreeSortParams;
@@ -217,8 +208,7 @@ type
     procedure SetFieldData(Field: TField; Buffer: Pointer); override;
 
     procedure SortOnFields(const FieldNames: string;
-      const CaseSensitive: TsBooleanArray = nil;
-      const Ascending: TsBooleanArray = nil);
+      const Options: TsSortOptionsArray = nil);
 
     property Modified: boolean read FModified;
 
@@ -638,7 +628,7 @@ begin
 end;
 
 procedure TsWorksheetDataset.CreateSortParams(const FieldNames: string;
-  const CaseSensitive, Ascending: array of boolean);
+  const Options: TsSortOptionsArray);
 var
   field_names: TStringArray;
   field: TField;
@@ -661,10 +651,8 @@ begin
     if not (field.DataType in (ftSupported - [ftMemo])) then
       DatabaseError(Format('Type of field "%s" not supported.', [field_names[i]]));
     FSortParams.Keys[i].ColRowIndex := ColIndexFromField(field);
-    if (i < Length(CaseSensitive)) and not CaseSensitive[i] then
-      Include(FSortParams.Keys[i].Options, ssoCaseInsensitive);
-    if (i < Length(Ascending)) and not Ascending[i] then
-      Include(FSortParams.Keys[i].Options, ssoDescending);
+    if i < Length(Options) then
+      FSortParams.Keys[i].Options := Options[i];
   end;
 end;
 
@@ -1870,8 +1858,7 @@ begin
 end;
 
 procedure TsWorksheetDataset.SortOnFields(const FieldNames: string;
-  const CaseSensitive: TsBooleanArray = nil;
-  const Ascending: TsBooleanArray = nil);
+  const Options: TsSortOptionsArray = nil);
 var
   bm: TBookmark;
 begin
@@ -1879,10 +1866,9 @@ begin
   try
     DisableControls;
     try
-      CreateSortParams(FieldNames, CaseSensitive, Ascending);
+      CreateSortParams(FieldNames, Options);
       Sort;
       FModified := true;
-//      RecalcBufListSize;
     finally
       EnableControls;
     end;

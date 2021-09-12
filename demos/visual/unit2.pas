@@ -7,7 +7,7 @@ interface
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls,
   DB, DBCtrls, DBGrids,
-  fpsDataset, xlsxOOXML;
+  fpsDataset, fpsTypes, xlsxOOXML;
 
 type
 
@@ -318,7 +318,10 @@ end;
 
 procedure TForm1.Button1Click(Sender: TObject);
 begin
-  FDataset.SortOnFields('IntCol', [false], [Sender = Button1]);
+  if Sender = Button1 then
+    FDataset.SortOnFields('IntCol')
+  else
+    FDataset.SortOnFields('IntCol', [[ssoDescending]]);
 end;
 
 procedure TForm1.Button2Click(Sender: TObject);
