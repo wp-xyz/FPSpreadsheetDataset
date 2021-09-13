@@ -138,28 +138,14 @@ begin
 end;
 
 function TFilterTest.CreateAndOpenDataset: TsWorksheetDataset;
-
-  procedure AddFieldDef(FieldName: String; DataType: TFieldType;
-    Size, ColIndex: Integer);
-  var
-    fieldDef: TsFieldDef;
-  begin
-    with Result do
-    begin
-      FieldDefs.Add(FieldName, DataType, Size);
-      fieldDef := FieldDefs[FieldDefs.Count-1] as TsFieldDef;
-      fieldDef.ColIndex := ColIndex;
-    end;
-  end;
-
 begin
   Result := TsWorksheetDataset.Create(nil);
   Result.FileName := DataFileName;
   Result.SheetName := SHEET_NAME;
   Result.AutoFieldDefs := false;
-  AddFieldDef(INT_FIELD, ftInteger, 0, INT_COL);
-  AddFieldDef(STRING_FIELD, ftString, 20, STRING_COL);
-  AddFieldDef(WIDESTRING_FIELD, ftWideString, 20, WIDESTRING_COL);
+  Result.AddFieldDef(INT_FIELD, ftInteger);
+  Result.AddFieldDef(STRING_FIELD, ftString, 20);
+  Result.AddFieldDef(WIDESTRING_FIELD, ftWideString, 20);
   Result.CreateTable;
   Result.Open;
 end;

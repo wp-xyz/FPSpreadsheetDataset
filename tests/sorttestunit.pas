@@ -80,8 +80,6 @@ end;
 procedure TSortTest.SortTest(SortField: String; Descending, CaseInsensitive: Boolean);
 var
   dataset: TsWorksheetDataset;
-  workbook: TsWorkbook;
-  worksheet: TsWorksheet;
   options: TsSortOptions;
   intField: TField;
   textField: TField;

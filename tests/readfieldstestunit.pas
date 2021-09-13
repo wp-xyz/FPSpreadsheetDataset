@@ -72,8 +72,6 @@ var
   DataFileName: String;
 
 function TReadFieldsTest.CreateAndOpenDataset(AutoFieldDefs: Boolean): TsWorksheetDataset;
-var
-  i: Integer;
 begin
   Result := TsWorksheetDataset.Create(nil);
   Result.AutoFieldDefs:= true;
@@ -82,18 +80,16 @@ begin
   Result.AutoFieldDefs := AutoFieldDefs;
   if not AutoFieldDefs then
   begin
-    Result.FieldDefs.Add('IntCol', ftInteger);
-    Result.FieldDefs.Add('ByteCol', ftByte);
-    Result.FieldDefs.Add('WordCol', ftWord);
-    Result.FieldDefs.Add('FloatCol', ftFloat);
-    Result.FieldDefs.Add('StringCol', ftString, 20);
-    Result.FieldDefs.Add('BoolCol', ftBoolean);
-    Result.FieldDefs.Add('DateCol', ftDate);
-    Result.FieldDefs.Add('TimeCol', ftTime);
-    Result.FieldDefs.Add('DateTimeCol', ftDateTime);
-    Result.FieldDefs.Add('MemoCol', ftMemo);
-    for i := 0 to Result.FieldDefs.Count-1 do
-      TsFieldDef(Result.FieldDefs[i]).ColIndex := i;
+    Result.AddFieldDef('IntCol', ftInteger);
+    Result.AddFieldDef('ByteCol', ftByte);
+    Result.AddFieldDef('WordCol', ftWord);
+    Result.AddFieldDef('FloatCol', ftFloat);
+    Result.AddFieldDef('StringCol', ftString, 30);
+    Result.AddFieldDef('BoolCol', ftBoolean);
+    Result.AddFieldDef('DateCol', ftDate);
+    Result.AddFieldDef('TimeCol', ftTime);
+    Result.AddFieldDef('DateTimeCol', ftDateTime);
+    Result.AddFieldDef('MemoCol', ftMemo);
     Result.CreateTable;
   end;
   Result.Open;
