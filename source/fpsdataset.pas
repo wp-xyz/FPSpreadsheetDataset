@@ -74,7 +74,7 @@ type
     constructor Create(ACollection: TCollection); override;
     constructor Create(AOwner: TFieldDefs; const AName: string; ADataType: TFieldType;
       ASize: Integer; ARequired: Boolean; AFieldNo: Longint; AColIndex: TColIndex
-      {$IF FPC_FullVersion >= 30200}; ACodePage: TSystemCodePage = CP_ACP{$IFEND}
+      {$IF FPC_FullVersion >= 30200}; ACodePage: TSystemCodePage = CP_UTF8{$IFEND}
       ); overload;
     procedure Assign(ASource: TPersistent); override;
   published
@@ -187,6 +187,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    function AddFieldDef(AName: String; ADataType: TFieldType; ASize: Integer = 0;
+      AColIndex: Integer = -1; ACodePage: TSystemCodePage = CP_UTF8): TsFieldDef; overload;
     function BookmarkValid(ABookmark: TBookmark): Boolean; override;
     procedure Clear;
     procedure Clear(ClearDefs: Boolean);
@@ -330,7 +332,7 @@ constructor TsFieldDef.Create(AOwner: TFieldDefs; const AName: string;
   ADataType: TFieldType; ASize: Integer; ARequired: Boolean; AFieldNo: Longint;
   AColIndex: TColIndex
   {$IF FPC_FullVersion >= 30200}
-  ; ACodePage: TSystemCodePage = CP_ACP
+  ; ACodePage: TSystemCodePage = CP_UTF8
   {$IFEND}); overload;
 begin
   inherited Create(AOwner, AName, ADataType, ASize, ARequired, AFieldNo{$IF FPC_FullVersion >= 30200}, ACodePage{$IFEND});
@@ -477,6 +479,28 @@ begin
   inherited;
 end;
 
+{ Adds a FieldDef to the FieldDefs collection. This is an adapted version
+  for this dataset class because defines the column index of the field in the
+  worksheet, and, in case of FPC 3.2+, creates string fields with UTF8 codepage.
+
+  ALWAYS USE THIS METHOD TO CREATE FIELDDEFS.
+
+  When the fielddef is added in the "normal" way (i.e. FieldDefs.Add(...) ),
+  the column index is not specified and the dataset will not work!
+
+  The argument ACodePage is ignored when FPC is older than v3.2. }
+function TsWorksheetDataset.AddFieldDef(
+  AName: String; ADataType: TFieldType; ASize: Integer = 0; AColIndex: Integer = -1;
+  ACodePage: TSystemCodePage = CP_UTF8): TsFieldDef;
+begin
+  if AColIndex = -1 then
+    AColIndex := FieldDefs.Count;
+  Result := TsFieldDef.Create(TsFieldDefs(FieldDefs),
+    AName, ADataType, ASize, false, FieldDefs.Count+1, AColIndex
+    {$IF FPC_FullVersion >= 30200}, ACodePage {$IFEND}
+  );
+end;
+
 procedure TsWorksheetDataset.AllocBlobPointers(Buffer: TRecordBuffer);
 var
   i: Integer;
@@ -540,13 +564,19 @@ begin
   begin
     case FieldDefs[i].DataType of
       ftString, ftFixedChar:
+        { Text cells are UTF8, and the string fields are created as UTF8 by default
+          as well. But on old FPC they are created with code page CP_ACP. To
+          avoid truncation of cell text we reserve space as if all characters were
+          4-byte utf8. }
       {$IF FPC_FullVersion >= 30200}
-        if FieldDefs[i].Codepage = CP_UTF8 then
-          fs := FieldDefs[i].Size*4 + 1
+        if FieldDefs[i].Codepage <> CP_UTF8 then
+          fs := FieldDefs[i].Size + 1
+//          fs := FieldDefs[i].Size*4 + 1
           // a UTF8 char point requires 1-4 bytes - we must reserve the maximum!
         else
       {$IFEND}
-        fs := FieldDefs[i].Size + 1;  // +1 for zero termination
+        fs := FieldDefs[i].Size*4 + 1;
+//        fs := FieldDefs[i].Size + 1;  // +1 for zero termination
       ftWideString, ftFixedWideChar:
         fs := (FieldDefs[i].Size + 1) * 2;
       ftInteger, ftAutoInc:
@@ -1463,12 +1493,13 @@ begin
           end else
           if field.DataType in [ftWideString, ftFixedWideChar] then
           begin
-            maxLen := (field.DataSize - 2) div 2;
-            ws := UTF16Copy(UTF8Decode(s), 1, maxLen) + #0#0;
+            maxLen := field.Size;
+            ws := UTF8Decode(s);
+            ws := UTF16Copy(ws, 1, maxLen) + #0#0;
             Move(ws[1], Buffer^, Length(ws)*2);
           end else
           begin
-            maxLen := field.DataSize - 1;
+            maxLen := field.Size;
             s := UTF8Copy(s, 1, maxLen) + #0;
             Move(s[1], Buffer^, Length(s));
           end;
