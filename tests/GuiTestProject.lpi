@@ -1,17 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CONFIG>
   <ProjectOptions>
-    <Version Value="12"/>
+    <Version Value="11"/>
     <PathDelim Value="\"/>
     <General>
       <SessionStorage Value="InProjectDir"/>
+      <MainUnit Value="0"/>
       <Title Value="GuiTestProject"/>
       <ResourceType Value="res"/>
       <UseXPManifest Value="True"/>
       <Icon Value="0"/>
     </General>
-    <BuildModes>
-      <Item Name="Default" Default="True"/>
+    <BuildModes Count="1">
+      <Item1 Name="Default" Default="True"/>
     </BuildModes>
     <PublishOptions>
       <Version Value="2"/>
@@ -19,38 +20,44 @@
     </PublishOptions>
     <RunParams>
       <FormatVersion Value="2"/>
+      <Modes Count="0"/>
     </RunParams>
-    <RequiredPackages>
-      <Item>
+    <RequiredPackages Count="3">
+      <Item1>
         <PackageName Value="laz_fpspreadsheet_dataset"/>
-      </Item>
-      <Item>
+      </Item1>
+      <Item2>
         <PackageName Value="fpcunittestrunner"/>
-      </Item>
-      <Item>
+      </Item2>
+      <Item3>
         <PackageName Value="LCL"/>
-      </Item>
+      </Item3>
     </RequiredPackages>
-    <Units>
-      <Unit>
+    <Units Count="5">
+      <Unit0>
         <Filename Value="GuiTestProject.lpr"/>
         <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
+      </Unit0>
+      <Unit1>
         <Filename Value="readfieldstestunit.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="ReadFieldsTestUnit"/>
-      </Unit>
-      <Unit>
+      </Unit1>
+      <Unit2>
         <Filename Value="sorttestunit.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="SortTestUnit"/>
-      </Unit>
-      <Unit>
+      </Unit2>
+      <Unit3>
         <Filename Value="filtertestunit.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="FilterTestUnit"/>
-      </Unit>
+      </Unit3>
+      <Unit4>
+        <Filename Value="posttestunit.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="PostTestUnit"/>
+      </Unit4>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -84,19 +91,19 @@
     </Linking>
   </CompilerOptions>
   <Debugging>
-    <Exceptions>
-      <Item>
+    <Exceptions Count="4">
+      <Item1>
         <Name Value="EAbort"/>
-      </Item>
-      <Item>
+      </Item1>
+      <Item2>
         <Name Value="ECodetoolError"/>
-      </Item>
-      <Item>
+      </Item2>
+      <Item3>
         <Name Value="EFOpenError"/>
-      </Item>
-      <Item>
+      </Item3>
+      <Item4>
         <Name Value="EAssertionFailedError"/>
-      </Item>
+      </Item4>
     </Exceptions>
   </Debugging>
 </CONFIG>
