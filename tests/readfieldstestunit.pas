@@ -20,7 +20,9 @@ type
     procedure TearDown; override;
   published
     procedure ReadIntegerField;
+    {$IF FPC_FullVersion >= 30202}
     procedure ReadByteField;
+    {$IFEND}
     procedure ReadWordField;
     procedure ReadFloatField;
     procedure ReadStringField;
@@ -81,7 +83,11 @@ begin
   if not AutoFieldDefs then
   begin
     Result.AddFieldDef('IntCol', ftInteger);
+    {$IFDEF FP_FullVersion >= 30202}
     Result.AddFieldDef('ByteCol', ftByte);
+    {$ELSE}
+    Result.AddFieldDef('ByteCol', ftInteger);  // No ftByte inf FPC < 3.2.2
+    {$IFEND}
     Result.AddFieldDef('WordCol', ftWord);
     Result.AddFieldDef('FloatCol', ftFloat);
     Result.AddFieldDef('StringCol', ftString, 30);
@@ -211,7 +217,11 @@ begin
             f.AsString,
             'Text mismatch in row ' + IntToStr(row)
           )
-        else if (f.DataType in [ftInteger, ftByte, ftWord, ftSmallInt, ftLargeInt]) then
+        else
+        if (f.DataType in [
+          ftInteger, {$IF FPC_FullVersion >= 30202}ftByte, {$IFEND}
+          ftWord, ftSmallInt, ftLargeInt])
+        then
           CheckEquals(
             round(worksheet.ReadAsNumber(row, col)),
             f.AsInteger,
@@ -334,10 +344,12 @@ begin
   ReadFieldTest(INT_COL, 'IntCol', false);
 end;
 
+{$IF FPC_FullVersion >= 30202}
 procedure TReadFieldsTest.ReadByteField;
 begin
   ReadFieldTest(BYTE_COL, 'ByteCol', false);
 end;
+{$IFEND}
 
 procedure TReadFieldsTest.ReadWordField;
 begin
