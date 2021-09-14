@@ -1748,6 +1748,9 @@ var
   fsize: Integer;
   {%H-}dt: TDateTime;
   dtr: TDateTimeRec;
+  s: String;
+  ws: widestring;
+  L: Integer;
 begin
   if not GetActiveBuffer(destBuffer) then
     exit;
@@ -1773,14 +1776,39 @@ begin
         dt := DateTimeRecToDateTime(Field.DataType, dtr);
         Move(dt, destBuffer^, SizeOf(dt));
       end else
+      if Field.DataType in [ftString, ftFixedChar] then
       begin
-        fsize := Field.DataSize;
-        if Field.DataType in [ftString, ftFixedChar] then
-          dec(fSize);  // Do not move terminating 0 which is included in DataSize
-        if Field.DataType in [ftWideString, ftFixedWideChar] then
-          dec(fSize, 2);
-        Move(Buffer^, destBuffer^, fsize);
-      end;
+        FillChar(destBuffer^, Field.DataSize, 0);
+        // Truncate strings which have more characters than efined by Field.Size.
+        // This should have been done by the calling routine, but it considers
+        // only Field.Datasize.
+        s := StrPas(PAnsiChar(Buffer));
+        if (TStringField(Field).CodePage = CP_UTF8) then
+        begin
+          L := UTF8Length(s);
+          if L > Field.Size then
+            s := UTF8Copy(s, 1, Field.Size);
+          Move(s[1], destBuffer^, Length(s));
+        end else
+        begin
+          L := Length(s);
+          if L > Field.Size then
+            s := Copy(s, 1, Field.Size);
+          Move(s[1], destBuffer^, Length(s))
+        end;
+      end else
+      if Field.DataType in [ftWideString, ftFixedWideChar] then
+      begin
+        // Truncate strings which have more characters than efined by Field.Size.
+        // This should have been done by the calling routine, but it considers
+        // only Field.Datasize.
+        FillChar(destBuffer^, Field.Size*2, 0);
+        ws := StrPas(PWideChar(Buffer));
+        if Length(ws) > Field.Size then
+          ws := UTF16Copy(ws, 1, Field.Size);
+        Move(ws[1], destBuffer^, Length(ws)*2);
+      end else
+        Move(Buffer^, destBuffer^, Field.DataSize);
     end;
   end else
   begin  // Calculated, Lookup
