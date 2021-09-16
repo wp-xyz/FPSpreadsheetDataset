@@ -36,7 +36,7 @@
         <PackageName Value="LCL"/>
       </Item3>
     </RequiredPackages>
-    <Units Count="6">
+    <Units Count="7">
       <Unit0>
         <Filename Value="GuiTestProject.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -66,6 +66,11 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="EmptyColumnsTestUnit"/>
       </Unit5>
+      <Unit6>
+        <Filename Value="searchtestunit.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="SearchTestUnit"/>
+      </Unit6>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
