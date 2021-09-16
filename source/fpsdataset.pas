@@ -570,19 +570,13 @@ begin
   begin
     case FieldDefs[i].DataType of
       ftString, ftFixedChar:
-        { Text cells are UTF8, and the string fields are created as UTF8 by default
-          as well. But on old FPC they are created with code page CP_ACP. To
-          avoid truncation of cell text we reserve space as if all characters were
-          4-byte utf8. }
       {$IF FPC_FullVersion >= 30200}
-        if FieldDefs[i].Codepage <> CP_UTF8 then
-          fs := FieldDefs[i].Size + 1
-//          fs := FieldDefs[i].Size*4 + 1
+        if FieldDefs[i].Codepage = CP_UTF8 then
+          fs := FieldDefs[i].Size*4 + 1
           // a UTF8 char point requires 1-4 bytes - we must reserve the maximum!
         else
       {$IFEND}
-        fs := FieldDefs[i].Size*4 + 1;
-//        fs := FieldDefs[i].Size + 1;  // +1 for zero termination
+        fs := FieldDefs[i].Size + 1;  // +1 for zero termination
       ftWideString, ftFixedWideChar:
         fs := (FieldDefs[i].Size + 1) * 2;
       ftInteger, ftAutoInc:
