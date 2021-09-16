@@ -2,6 +2,10 @@ unit ReadFieldsTestUnit;
 
 {$mode objfpc}{$H+}
 
+{$IF FPC_FullVersion >= 30300}
+  {$DEFINE TEST_BYTE_FIELD}
+{$IFEND}
+
 interface
 
 uses
@@ -20,7 +24,7 @@ type
     procedure TearDown; override;
   published
     procedure ReadIntegerField;
-    {$IF FPC_FullVersion >= 30202}
+    {$IFDEF TEST_BYTE_FIELD}
     procedure ReadByteField;
     {$IFEND}
     procedure ReadWordField;
@@ -83,11 +87,11 @@ begin
   if not AutoFieldDefs then
   begin
     Result.AddFieldDef('IntCol', ftInteger);
-    {$IFDEF FP_FullVersion >= 30202}
+    {$IFDEF TEST_BYTE_FIELD}
     Result.AddFieldDef('ByteCol', ftByte);
     {$ELSE}
-    Result.AddFieldDef('ByteCol', ftInteger);  // No ftByte inf FPC < 3.2.2
-    {$IFEND}
+    Result.AddFieldDef('ByteCol', ftInteger);  // No ftByte in too old FPC
+    {$ENDIF}
     Result.AddFieldDef('WordCol', ftWord);
     Result.AddFieldDef('FloatCol', ftFloat);
     Result.AddFieldDef('StringCol', ftString, 30);
@@ -219,7 +223,7 @@ begin
           )
         else
         if (f.DataType in [
-          ftInteger, {$IF FPC_FullVersion >= 30300}ftByte, {$IFEND}
+          ftInteger, {$IFDEF TEST_BYTE_FIELD}ftByte, {$ENDIF}
           ftWord, ftSmallInt, ftLargeInt])
         then
           CheckEquals(
@@ -344,12 +348,12 @@ begin
   ReadFieldTest(INT_COL, 'IntCol', false);
 end;
 
-{$IF FPC_FullVersion >= 30202}
+{$IFDEF TEST_BYTE_FIELD}
 procedure TReadFieldsTest.ReadByteField;
 begin
   ReadFieldTest(BYTE_COL, 'ByteCol', false);
 end;
-{$IFEND}
+{$ENDIF}
 
 procedure TReadFieldsTest.ReadWordField;
 begin
