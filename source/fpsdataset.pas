@@ -113,6 +113,7 @@ type
     FFilterBuffer: TRecordBuffer;
     FTableCreated: boolean;
     FAutoFieldDefs: Boolean;
+    FAutoFieldDefStringSize: Integer;
     FIsOpen: boolean;
     FParser: TBufDatasetParser;
     FAutoIncValue: Integer;
@@ -133,6 +134,7 @@ type
     function GetNullMaskSize: Integer;
     function GetRecordInfoPtr(Buffer: TRecordBuffer): PsRecordInfo;
     function GetRowIndexFromRecNo(ARecNo: Integer): TRowIndex;
+    procedure SetAutoFieldDefStringSize(Value: Integer);
     procedure SetCurrentRow(ARow: TRowIndex);
 
   protected
@@ -207,6 +209,10 @@ type
     procedure SortOnFields(const FieldNames: String); overload;
     procedure SortOnFields(const FieldNames: String; const Options: TsSortOptionsArray); overload;
 
+    { Defines the field size of string fields to be used by FieldDef autodetection.
+      When AutoFieldDefStringSize is 0 field size depends on the longest text in
+      the worksheet column. }
+    property AutoFieldDefStringSize: Integer read FAutoFieldDefStringSize write SetAutoFieldDefStringSize default 0;
     property Modified: boolean read FModified;
 
   published
@@ -794,6 +800,9 @@ begin
     fs := 0;
     case ft of
       ftString:
+        if FAutoFieldDefStringSize > 0 then
+          fs := FAutoFieldDefStringSize
+        else
         begin
           // Find longest text in column...
           for r := GetFirstDataRowIndex to GetLastDataRowIndex do
@@ -1717,6 +1726,14 @@ begin
       FParser.ParseExpression(AFilter);
     end;
   end;
+end;
+
+procedure TsWorksheetDataset.SetAutoFieldDefStringSize(Value: Integer);
+begin
+  if FAutoFieldDefStringSize = Value then
+    exit;
+  CheckInactive;
+  FAutoFieldDefStringSize := Value;
 end;
 
 procedure TsWorksheetDataset.SetBookmarkData(Buffer: TRecordBuffer; Data: Pointer);
