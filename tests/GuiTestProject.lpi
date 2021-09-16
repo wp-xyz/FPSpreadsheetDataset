@@ -62,9 +62,9 @@
         <UnitName Value="PostTestUnit"/>
       </Unit4>
       <Unit5>
-        <Filename Value="fielddefstestunit.pas"/>
+        <Filename Value="emptycolumnstestunit.pas"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="FieldDefsTestUnit"/>
+        <UnitName Value="EmptyColumnsTestUnit"/>
       </Unit5>
     </Units>
   </ProjectOptions>
