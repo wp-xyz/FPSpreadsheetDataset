@@ -202,10 +202,10 @@ type
       const ResultFields: String): Variant; override;
     procedure SetFieldData(Field: TField; Buffer: Pointer); override;
 
-    procedure SortOnField(const FieldName: string;
-      const Options: TsSortOptions = []);
-    procedure SortOnFields(const FieldNames: string;
-      const Options: TsSortOptionsArray = nil);
+    procedure SortOnField(const FieldName: String); overload;
+    procedure SortOnField(const FieldName: String; const Options: TsSortOptions); overload;
+    procedure SortOnFields(const FieldNames: String); overload;
+    procedure SortOnFields(const FieldNames: String; const Options: TsSortOptionsArray); overload;
 
     property Modified: boolean read FModified;
 
@@ -1517,7 +1517,7 @@ begin
               if field.DataType = ftAutoInc then
                 FAutoIncField := TAutoIncField(field);
             end;
-          {$IF FPC_FullVersion >= 30301}
+          {$IF FPC_FullVersion >= 30300}
           ftByte:
             begin
               b := byte(round(cell^.NumberValue));
@@ -1783,6 +1783,7 @@ begin
         // This should have been done by the calling routine, but it considers
         // only Field.Datasize.
         s := StrPas(PAnsiChar(Buffer));
+        {$IF FPC_FullVersion >= 30200};
         if (TStringField(Field).CodePage = CP_UTF8) then
         begin
           L := UTF8Length(s);
@@ -1790,6 +1791,7 @@ begin
             s := UTF8Copy(s, 1, Field.Size);
           Move(s[1], destBuffer^, Length(s));
         end else
+        {$IFEND}
         begin
           L := Length(s);
           if L > Field.Size then
@@ -1799,7 +1801,7 @@ begin
       end else
       if Field.DataType in [ftWideString, ftFixedWideChar] then
       begin
-        // Truncate strings which have more characters than efined by Field.Size.
+        // Truncate strings which have more characters than defined by Field.Size.
         // This should have been done by the calling routine, but it considers
         // only Field.Datasize.
         FillChar(destBuffer^, Field.Size*2, 0);
@@ -1919,16 +1921,24 @@ begin
   FWorksheet.Sort(FSortParams, GetFirstDataRowIndex, firstCol, GetLastDataRowIndex, FLastCol);
 end;
 
+procedure TsWorksheetDataset.SortOnField(const FieldName: String);
+begin
+  SortOnField(FieldName, []);
+end;
+
 procedure TsWorksheetDataset.SortOnField(const FieldName: String;
-  const Options: TsSortOptions = []);
+  const Options: TsSortOptions);
 var
   bm: TBookmark;
+  optns: TsSortOptionsArray;
 begin
   bm := GetBookmark;
   try
     DisableControls;
     try
-      CreateSortParams(FieldName, [Options]);
+      SetLength(optns, 1);
+      optns[0] := Options;
+      CreateSortParams(FieldName, optns);
       Sort;
       FModified := true;
     finally
@@ -1941,8 +1951,13 @@ begin
   Resync([]);
 end;
 
+procedure TsWorksheetDataset.SortOnFields(const FieldNames: String);
+begin
+  SortOnFields(FieldNames, nil);
+end;
+
 procedure TsWorksheetDataset.SortOnFields(const FieldNames: string;
-  const Options: TsSortOptionsArray = nil);
+  const Options: TsSortOptionsArray);
 var
   bm: TBookmark;
 begin

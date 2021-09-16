@@ -95,7 +95,7 @@ begin
 
   dataset := CreateAndOpenDataset;
   try
-    dataset.SortOnFields(SortField, [options]);
+    dataset.SortOnField(SortField, options);
 
     // For debugging
     dataset.Close;  // to write the worksheet to file

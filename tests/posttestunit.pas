@@ -11,7 +11,7 @@ unit PostTestUnit;
 interface
 
 uses
-  Classes, SysUtils, fpcunit, testutils, testregistry,
+  Classes, SysUtils, fpcunit, testregistry,
   DB,
   fpsdataset, fpspreadsheet, fpstypes, fpsutils;
 
@@ -93,7 +93,7 @@ begin
       case ADataType of
         ftInteger    : field.AsInteger := TestData[i].IntValue;
         ftString     : field.AsString := TestData[i].StringValue;
-        ftWideString : field.AsString := TestData[i].WideStringValue;
+        ftWideString : field.AsString := UTF8Decode(TestData[i].WideStringValue);
       end;
       dataset.Post;
     end;

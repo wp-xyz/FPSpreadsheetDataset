@@ -219,7 +219,7 @@ begin
           )
         else
         if (f.DataType in [
-          ftInteger, {$IF FPC_FullVersion >= 30202}ftByte, {$IFEND}
+          ftInteger, {$IF FPC_FullVersion >= 30300}ftByte, {$IFEND}
           ftWord, ftSmallInt, ftLargeInt])
         then
           CheckEquals(
