@@ -4,8 +4,8 @@ program GuiTestProject;
 
 uses
   Interfaces, Forms, GuiTestRunner, 
-  ReadFieldsTestUnit, SortTestUnit, FilterTestUnit, PostTestUnit, 
-  EmptyColumnsTestUnit, SearchTestUnit;
+  ReadFieldsTestUnit, SortTestUnit, SearchTestUnit, FilterTestUnit, PostTestUnit,
+  EmptyColumnsTestUnit;
 
 {$R *.res}
 

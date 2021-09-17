@@ -16,6 +16,8 @@ type
     function CreateAndOpenDataset: TsWorksheetDataset;
     procedure LocateTest(SearchInField: String; SearchValue: Variant;
       ExpectedRecNo: Integer; Options: TLocateOptions = []);
+    procedure LookupTest(SearchInField: String; SearchValue: Variant;
+      ResultFields: String; ExpectedValues: Variant);
 
   protected
     procedure SetUp; override;
@@ -36,12 +38,24 @@ type
     procedure LocateTest_NonASCIIWideString_Found;
     procedure LocateTest_NonASCIIWideString_Found_CaseInsensitive;
     procedure LocateTest_NonASCIIWideString_NotFound;
+
+    procedure LookupTest_Int_Found;
+    procedure LookupTest_Int_NotFound;
+    procedure LookupTest_String_Found;
+    procedure LookupTest_String_NotFound;
+    procedure LookupTest_NonASCIIString_Found;
+    procedure LookupTest_NonASCIIString_NotFound;
+    procedure LookupTest_WideString_Found;
+    procedure LookupTest_WideString_NotFound;
+    procedure LookupTest_NonASCIIWideString_Found;
+    procedure LookupTest_NonASCIIWideString_NotFound;
+
   end;
 
 implementation
 
 uses
-  LazUTF8;
+  Variants, LazUTF8;
 
 const
   FILE_NAME = 'testfile.xlsx';
@@ -220,6 +234,182 @@ begin
   ws := UTF8ToUTF16('Würde');
   LocateTest(WIDESTRING_FIELD, ws, -1);
 end;
+
+// -----------------------------------------------------------------------------
+
+procedure TSearchTest.LookupTest(SearchInField: String; SearchValue: Variant;
+  ResultFields: String; ExpectedValues: Variant);
+var
+  dataset: TsWorksheetDataset;
+  savedRecNo: Integer;
+  i, j: Integer;
+  actualValues: Variant;
+  expectedInt, actualInt: Integer;
+  expectedStr, actualStr: String;
+  expectedWideStr, actualWideStr: WideString;
+  L: TStringList;
+begin
+  dataset := CreateAndOpenDataset;
+  try
+    savedRecNo := dataset.RecNo;
+    actualValues := dataset.Lookup(SearchInField, SearchValue, ResultFields);
+
+    // The active record position must not be changed
+    CheckEquals(
+      savedRecNo,
+      dataset.RecNo,
+      'Lookup must not move the active record.'
+    );
+
+    // Compare count of elements in value arrays
+    CheckEquals(
+      VarArrayDimCount(ExpectedValues),
+      VarArrayDimCount(actualValues),
+      'Mismatch in found field values.'
+    );
+
+    if VarIsNull(ExpectedValues) then
+    begin
+      CheckEquals(
+        true,
+        varIsNull(actualValues),
+        'Record found but not expected.'
+      );
+      exit;
+    end;
+
+    if not VarIsNull(ExpectedValues) then
+      CheckEquals(
+        false,
+        varIsNull(actualValues),
+        'Record expected but not found.'
+      );
+
+    L := TStringList.Create;
+    L.StrictDelimiter := true;
+    L.Delimiter := ';';
+    L.DelimitedText := ResultFields;
+
+    // Compare lookup values with expected values
+    for i := 0 to dataset.Fields.Count-1 do
+    begin
+      j := L.IndexOf(dataset.Fields[i].FieldName);
+      if j = -1 then
+        continue;
+
+      case dataset.Fields[i].DataType of
+        ftInteger:
+          begin
+            expectedInt := ExpectedValues[j];
+            actualInt := actualvalues[j];
+            CheckEquals(
+              expectedInt,
+              actualInt,
+              'Integer field lookup value mismatch'
+            );
+          end;
+        ftString:
+          begin
+            expectedStr := VarToStr(ExpectedValues[j]);
+            actualStr := VarToStr(actualValues[j]);
+            CheckEquals(
+              expectedStr,
+              actualStr,
+              'String field lookup value mismatch'
+            );
+          end;
+        ftWideString:
+          begin
+            expectedWideStr := VarToWideStr(ExpectedValues[j]);
+            actualWideStr := VarToWideStr(actualValues[j]);
+            CheckEquals(
+              ExpectedWideStr,
+              actualWideStr,
+              'Widestring field lookup value mismatch'
+            );
+          end;
+        else
+          raise Exception.Create('Unsupported field type in LookupTest');
+      end;
+    end;
+    L.Free;
+  finally
+    dataset.Free;
+  end;
+end;
+
+procedure TSearchTest.LookupTest_Int_Found;
+var
+  ws: wideString;
+begin
+  ws := UTF8ToUTF16(WIDESTRING_VALUES[2]);
+  LookupTest(INT_FIELD, 20, STRING_FIELD+';'+WIDESTRING_FIELD, VarArrayOf(['a', ws]));
+end;
+
+procedure TSearchTest.LookupTest_Int_NotFound;
+begin
+  LookupTest(INT_FIELD, 200, STRING_FIELD+';'+WIDESTRING_FIELD, Null);
+end;
+
+procedure TSearchTest.LookupTest_String_Found;
+var
+  ws: wideString;
+begin
+  ws := UTF8ToUTF16(WIDESTRING_VALUES[3]);
+  LookupTest(STRING_FIELD, 'Hallo', INT_FIELD+';'+WIDESTRING_FIELD, VarArrayOf([-10, ws]));
+end;
+
+procedure TSearchTest.LookupTest_String_NotFound;
+begin
+  LookupTest(STRING_FIELD, 'Halloooo', INT_FIELD+';'+WIDESTRING_FIELD, Null);
+end;
+
+procedure TSearchTest.LookupTest_NonASCIIString_Found;
+var
+  ws: wideString;
+begin
+  ws := UTF8ToUTF16('xyz');
+  LookupTest(STRING_FIELD, 'äöü', INT_FIELD+';'+WIDESTRING_FIELD, VarArrayOf([3, ws]));
+end;
+
+procedure TSearchTest.LookupTest_NonASCIIString_NotFound;
+begin
+  LookupTest(STRING_FIELD, 'ÄÄÄÄ', INT_FIELD+';'+WIDESTRING_FIELD, Null);
+end;
+
+procedure TSearchTest.LookupTest_WideString_Found;
+var
+  ws: wideString;
+begin
+  ws := UTF8ToUTF16('ABC');
+  LookupTest(WIDESTRING_FIELD, ws, INT_FIELD+';'+STRING_FIELD, VarArrayOf([12, 'abc']));
+end;
+
+procedure TSearchTest.LookupTest_WideString_NotFound;
+var
+  ws: wideString;
+begin
+  ws := UTF8ToUTF16('ABCD');
+  LookupTest(WIDESTRING_FIELD, ws, INT_FIELD+';'+STRING_FIELD, null);
+end;
+
+procedure TSearchTest.LookupTest_NonASCIIWideString_Found;
+var
+  ws: wideString;
+begin
+  ws := UTF8ToUTF16('Äöü');
+  LookupTest(WIDESTRING_FIELD, ws, INT_FIELD+';'+STRING_FIELD, VarArrayOf([83, 'ijk']));
+end;
+
+procedure TSearchTest.LookupTest_NonASCIIWideString_NotFound;
+var
+  ws: wideString;
+begin
+  ws := UTF8ToUTF16('Äö');
+  LookupTest(WIDESTRING_FIELD, ws, INT_FIELD+';'+STRING_FIELD, null);
+end;
+
+// -----------------------------------------------------------------------------
 
 procedure TSearchTest.SetUp;
 var
