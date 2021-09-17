@@ -1497,7 +1497,7 @@ begin
           if field.DataType in [ftWideString, ftFixedWideChar] then
           begin
             maxLen := field.Size;
-            ws := UTF8Decode(s);
+            ws := UTF8ToUTF16(s);
             ws := UTF16Copy(ws, 1, maxLen) + #0#0;
             Move(ws[1], Buffer^, Length(ws)*2);
           end else
@@ -1604,6 +1604,7 @@ var
   i: integer;
   field: TField;
   s1,s2: String;
+  ws1, ws2: WideString;
 begin
   Result := false;
   SaveState := SetTempState(dsFilter);
@@ -1659,6 +1660,18 @@ begin
               Result := AnsiCompareText(s1, s2)=0
             else
               Result := s1=s2;
+          end else
+          // widestring fields
+          if field.DataType in [ftWideString, ftFixedWideChar] then
+          begin
+            ws1 := field.AsWideString;
+            ws2 := VarToWideStr(AKeyValues[i]);
+            if loPartialKey in Options then
+              ws1 := UTF16Copy(ws1, 1, Length(ws2));
+            if loCaseInsensitive in Options then
+              Result := WideCompareText(ws1, ws2) = 0
+            else
+              Result := ws1 = ws2;
           end
           // all other fields
           else
@@ -2045,7 +2058,8 @@ begin
           begin
             Setlength(ws, StrLen(PWideChar(P)));
             Move(P^, ws[1], Length(ws)*2);
-            FWorksheet.WriteText(cell, UTF8Encode(ws));
+            s := UTF16ToUTF8(ws);
+            FWorksheet.WriteText(cell, s);
           end;
         ftMemo:
           begin
