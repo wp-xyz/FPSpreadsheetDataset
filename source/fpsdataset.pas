@@ -52,6 +52,7 @@
 unit fpsDataset;
 
 {$mode ObjFPC}{$H+}
+{$R fpsdataset_images.res}
 
 interface
 
