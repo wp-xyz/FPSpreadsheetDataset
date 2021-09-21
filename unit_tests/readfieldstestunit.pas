@@ -29,6 +29,7 @@ type
     {$IFEND}
     procedure ReadWordField;
     procedure ReadFloatField;
+    procedure ReadCurrencyField;
     procedure ReadStringField;
     procedure ReadMemoField;
     procedure ReadBoolField;
@@ -40,6 +41,7 @@ type
     procedure ReadByteField_AutoFieldDefs;
     procedure ReadWordField_AutoFieldDefs;
     procedure ReadFloatField_AutoFieldDefs;
+    procedure ReadCurrencyField_AutoFieldDefs;
     procedure ReadStringField_AutoFieldDefs;
     procedure ReadMemoField_AutoFieldDefs;
     procedure ReadBoolField_AutoFieldDefs;
@@ -59,12 +61,13 @@ const
   BYTE_COL = 1;
   WORD_COL = 2;
   FLOAT_COL = 3;
-  STRING_COL = 4;
-  BOOL_COL = 5;
-  DATE_COL = 6;
-  TIME_COL = 7;
-  DATETIME_COL = 8;
-  MEMO_COL = 9;
+  CURRENCY_COL = 4;
+  STRING_COL = 5;
+  BOOL_COL = 6;
+  DATE_COL = 7;
+  TIME_COL = 8;
+  DATETIME_COL = 9;
+  MEMO_COL = 10;
 
   TestText: array[0..3] of string = (
     'Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua',
@@ -94,6 +97,7 @@ begin
     {$ENDIF}
     Result.AddFieldDef('WordCol', ftWord);
     Result.AddFieldDef('FloatCol', ftFloat);
+    Result.AddFieldDef('CurrencyCol', ftCurrency);
     Result.AddFieldDef('StringCol', ftString, 30);
     Result.AddFieldDef('BoolCol', ftBoolean);
     Result.AddFieldDef('DateCol', ftDate);
@@ -124,6 +128,7 @@ begin
     worksheet.WriteText(0, BYTE_COL, 'ByteCol');
     worksheet.WriteText(0, WORD_COL, 'WordCol');
     worksheet.WriteText(0, FLOAT_COL, 'FloatCol');
+    worksheet.WriteText(0, CURRENCY_COL, 'CurrencyCol');
     worksheet.WriteText(0, STRING_COL, 'StringCol');
     worksheet.WriteText(0, BOOL_COL, 'BoolCol');
     worksheet.WriteText(0, DATE_COL, 'DateCol');
@@ -139,6 +144,8 @@ begin
       worksheet.WriteNumber(r, WORD_COL, r*3, nfFixed, 0);
       // Write values to FloatCol
       worksheet.WriteNumber(r, FLOAT_COL, r*1.1-5.1, nfFixed, 2);
+      // Write values to CurrencyCol
+      worksheet.WriteCurrency(r, CURRENCY_COL, r*1000, nfCurrency);
       // Write values to StringCol
       case r of
         1: s := 'Статья';
@@ -231,7 +238,7 @@ begin
             f.AsInteger,
             'Integer value mismatch in row ' + IntToStr(row)
           )
-        else if (f.DataType in [ftFloat]) then
+        else if (f.DataType in [ftFloat, ftCurrency]) then
           CheckEquals(
             worksheet.ReadAsNumber(row, col),
             f.AsFloat,
@@ -312,6 +319,11 @@ begin
   ReadFieldTest(FLOAT_COL, 'FloatCol', true);
 end;
 
+procedure TReadFieldsTest.ReadCurrencyField_AutoFieldDefs;
+begin
+  ReadFieldTest(CURRENCY_COL, 'CurrencyCol', true);
+end;
+
 procedure TReadFieldsTest.ReadStringField_AutoFieldDefs;
 begin
   ReadFieldTest(STRING_COL, 'StringCol', true);
@@ -365,6 +377,11 @@ begin
   ReadFieldTest(FLOAT_COL, 'FloatCol', false);
 end;
 
+procedure TReadFieldsTest.ReadCurrencyField;
+begin
+  ReadFieldTest(CURRENCY_COL, 'CurrencyCol', false);
+end;
+
 procedure TReadFieldsTest.ReadStringField;
 begin
   ReadFieldTest(STRING_COL, 'StringCol', false);
@@ -397,7 +414,7 @@ end;
 
 
 initialization
-
   RegisterTest(TReadFieldsTest);
+
 end.
 

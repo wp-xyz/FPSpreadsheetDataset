@@ -37,6 +37,7 @@
   Planned but not yet working
   ' Field defs: Required, Unique etc possibly not supported ATM - to be tested
   * IndexDefs: not implemented
+  * Currency fields
 
   Issues
   * Text cells should be converted to text fields in UTF8 encoding. However,
@@ -265,8 +266,8 @@ uses
   LazUTF8, LazUTF16, Math, TypInfo, Variants, fpsNumFormat;
 
 const  // This are the field types of FPC 3.3.x
-  ftSupported = [ftString, ftSmallint, ftInteger, ftWord,ftBoolean, ftFloat,
-    {ftCurrency, ftBCD, } ftDate,  ftTime, ftDateTime,
+  ftSupported = [ftString, ftSmallint, ftInteger, ftWord, ftBoolean, ftFloat,
+    ftCurrency, {ftBCD, } ftDate,  ftTime, ftDateTime,
     {ftBytes, ftVarBytes, }ftAutoInc, ftBlob, ftMemo,
     {ftGraphic, ftFmtMemo, ftParadoxOle, ftDBaseOle, ftTypedBinary, ftCursor, }
     ftFixedChar, ftWideString, ftLargeint,
