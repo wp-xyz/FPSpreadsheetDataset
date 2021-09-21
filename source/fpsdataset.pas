@@ -37,7 +37,6 @@
   Planned but not yet working
   ' Field defs: Required, Unique etc possibly not supported ATM - to be tested
   * IndexDefs: not implemented
-  * Currency fields
 
   Issues
   * Text cells should be converted to text fields in UTF8 encoding. However,
@@ -1511,10 +1510,8 @@ begin
         end;
       cctNumber:
         case field.DataType of
-          ftFloat:
+          ftFloat, ftCurrency:
             Move(cell^.NumberValue, Buffer^, SizeOf(cell^.NumberValue));
-          ftCurrency:
-            Move(cell^.NumberValue, Buffer^, SizeOf(cell^.Numbervalue));
           ftInteger, ftAutoInc:
             begin
               i := Round(cell^.NumberValue);
