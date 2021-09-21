@@ -40,9 +40,6 @@ const
   SHEET_NAME = 'Sheet';
   COL_NAME = 'TestCol';
 
-  MAX_STRING_LENGTH = 10;
-  MAX_WIDESTRING_LENGTH = 10;
-
 var
   DataFileName: String;
 
@@ -56,11 +53,11 @@ type
 const
   TestData: Array[0..5] of TTestRecord = (
     (IntValue:  10; StringValue: 'abc';           WideStringValue: 'abc'),            // 0
-    (IntValue: -20; StringValue: 'äöü';           WideStringvalue: 'äöü'),            // 1
+    (IntValue: -20; StringValue: 'äöüαβγ';        WideStringvalue: 'äöüαβγ'),         // 1
     (IntValue: 100; StringValue: 'a234567890';    WideStringvalue: 'a234567890'),     // 2
     (IntValue:   0; StringValue: 'a234567890123'; WideStringvalue: 'a234567890123'),  // 3
-    (IntValue: 501; StringValue: 'ä234567890';    WideStringValue: 'ä234567890'),     // 4
-    (IntValue: 502; StringValue: 'ä234567890123'; WideStringValue: 'ä234567890123')   // 5
+    (IntValue: 501; StringValue: 'äα34567890';    WideStringValue: 'äα34567890'),     // 4
+    (IntValue: 502; StringValue: 'äα34567890123'; WideStringValue: 'äα34567890123')   // 5
   );
 
 procedure TPostTest.RunPostTest(ADataType: TFieldType; ASize: Integer = 0);
