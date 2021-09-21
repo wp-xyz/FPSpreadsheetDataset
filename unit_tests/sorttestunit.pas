@@ -56,7 +56,7 @@ const
     (IntValue: -1; TextValue: 'xyz')          // 4
   );
 
-  // These are the indexed into the UNSORTED array after sorting
+  // These are the indexes into the UNSORTED array after sorting
   SORTED_BY_INT_ASCENDING: array[0..4] of Integer = (4, 1, 2, 3, 0);
   SORTED_BY_INT_DESCENDING: array[0..4] of Integer = (0, 3, 2, 1, 4);
   SORTED_BY_TEXT_ASCENDING_CASESENS: array[0..4] of Integer = (2, 0, 3, 1, 4);
