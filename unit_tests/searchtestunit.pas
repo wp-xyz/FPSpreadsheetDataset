@@ -77,10 +77,10 @@ var
     12, 20, -10, 83, 3
   );
   STRING_VALUES: array[1..NUM_ROWS] of String = (
-    'abc', 'a', 'Hallo', 'ijk', 'äöü'
+    'abc', 'a', 'Hallo', 'ijk', 'äöüαβγ'
   );
   WIDESTRING_VALUES: array[1..NUM_ROWS] of String = (  // Strings are converted to wide at runtime
-    'ABC', 'A', 'Test', 'Äöü', 'xyz'
+    'ABC', 'A', 'Test', 'ÄöüΓ', 'xyz'
   );
 
 function TSearchTest.CreateAndOpenDataset: TsWorksheetDataset;
@@ -183,12 +183,12 @@ end;
 
 procedure TSearchTest.LocateTest_NonASCIIString_Found;
 begin
-  LocateTest(STRING_FIELD, 'äöü', 5);
+  LocateTest(STRING_FIELD, 'äöüαβγ', 5);
 end;
 
 procedure TSearchTest.LocateTest_NonASCIIString_Found_CaseInsensitive;
 begin
-  LocateTest(STRING_FIELD, 'ÄöÜ', 5, [loCaseInsensitive]);
+  LocateTest(STRING_FIELD, 'ÄöÜαβΓ', 5, [loCaseInsensitive]);
 end;
 
 procedure TSearchTest.LocateTest_NonASCIIString_NotFound;
@@ -215,7 +215,7 @@ procedure TSearchTest.LocateTest_NonASCIIWideString_Found;
 var
   ws: WideString;
 begin
-  ws := UTF8ToUTF16('Äöü');
+  ws := UTF8ToUTF16('ÄöüΓ');
   LocateTest(WIDESTRING_FIELD, ws, 4);
 end;
 
@@ -223,7 +223,7 @@ procedure TSearchTest.LocateTest_NonASCIIWideString_Found_CaseInsensitive;
 var
   ws: Widestring;
 begin
-  ws := UTF8ToUTF16('Äöü');
+  ws := UTF8ToUTF16('Äöüγ');
   LocateTest(WIDESTRING_FIELD, ws, 4, [loCaseInsensitive]);
 end;
 
@@ -231,7 +231,7 @@ procedure TSearchTest.LocateTest_NonASCIIWideString_NotFound;
 var
   ws: WideString;
 begin
-  ws := UTF8ToUTF16('Würde');
+  ws := UTF8ToUTF16('ä-α');
   LocateTest(WIDESTRING_FIELD, ws, -1);
 end;
 
@@ -369,12 +369,12 @@ var
   ws: wideString;
 begin
   ws := UTF8ToUTF16('xyz');
-  LookupTest(STRING_FIELD, 'äöü', INT_FIELD+';'+WIDESTRING_FIELD, VarArrayOf([3, ws]));
+  LookupTest(STRING_FIELD, 'äöüαβγ', INT_FIELD+';'+WIDESTRING_FIELD, VarArrayOf([3, ws]));
 end;
 
 procedure TSearchTest.LookupTest_NonASCIIString_NotFound;
 begin
-  LookupTest(STRING_FIELD, 'ÄÄÄÄ', INT_FIELD+';'+WIDESTRING_FIELD, Null);
+  LookupTest(STRING_FIELD, 'ÄÄÄÄα', INT_FIELD+';'+WIDESTRING_FIELD, Null);
 end;
 
 procedure TSearchTest.LookupTest_WideString_Found;
@@ -397,7 +397,7 @@ procedure TSearchTest.LookupTest_NonASCIIWideString_Found;
 var
   ws: wideString;
 begin
-  ws := UTF8ToUTF16('Äöü');
+  ws := UTF8ToUTF16('ÄöüΓ');
   LookupTest(WIDESTRING_FIELD, ws, INT_FIELD+';'+STRING_FIELD, VarArrayOf([83, 'ijk']));
 end;
 
@@ -405,7 +405,7 @@ procedure TSearchTest.LookupTest_NonASCIIWideString_NotFound;
 var
   ws: wideString;
 begin
-  ws := UTF8ToUTF16('Äö');
+  ws := UTF8ToUTF16('Äöαβ');
   LookupTest(WIDESTRING_FIELD, ws, INT_FIELD+';'+STRING_FIELD, null);
 end;
 
