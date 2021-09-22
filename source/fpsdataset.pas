@@ -33,6 +33,7 @@
   * Filtering by OnFilter event and by Filter property: working.
   * Persistent and calculated fields working
   * Sorting by method SortOnFields
+  * Selecting specific spreadsheet file format or automatic format detection.
 
   Planned but not yet working
   ' Field defs: Required, Unique etc possibly not supported ATM - to be tested
@@ -98,28 +99,30 @@ type
   { TsWorksheetDataset }
   TsWorksheetDataset = class(TDataset)
   private
-    FFileName: TFileName;
-    FSheetName: String;
-    FWorkbook: TsWorkbook;
-    FWorksheet: TsWorksheet;
-    FRecNo: Integer;                 // Current record number
-    FFirstRow: TRowIndex;            // WorksheetIndex of the first record
-    FLastRow: TRowIndex;             // Worksheet index of the last record
-    FLastCol: TColIndex;             // Worksheet index of the last column
-    FRecordCount: Integer;           // Number of records between first and last data rows
-    FRecordBufferSize: Integer;      // Size of the record buffer
-    FTotalFieldSize: Integer;        // Total size of the field data
-    FFieldOffsets: array of Integer; // Offset to field start in buffer
-    FModified: Boolean;              // Flag to show that workbook needs saving
-    FFilterBuffer: TRecordBuffer;
-    FTableCreated: boolean;
-    FAutoFieldDefs: Boolean;
-    FAutoFieldDefStringSize: Integer;
-    FIsOpen: boolean;
-    FParser: TBufDatasetParser;
-    FAutoIncValue: Integer;
-    FAutoIncField: TAutoIncField;
-    FSortParams: TsSortParams;
+    FFileName: TFileName;             // Name of the spreadsheet file
+    FSheetName: String;               // Name of the worksheet used by the dataset
+    FWorkbook: TsWorkbook;            // Underlying workbook providing the data
+    FWorksheet: TsWorksheet;          // Underlying worksheet providing the data
+    FRecNo: Integer;                  // Current record number
+    FFirstRow: TRowIndex;             // WorksheetIndex of the first record
+    FLastRow: TRowIndex;              // Worksheet index of the last record
+    FLastCol: TColIndex;              // Worksheet index of the last column
+    FRecordCount: Integer;            // Number of records between first and last data rows
+    FRecordBufferSize: Integer;       // Size of the record buffer
+    FTotalFieldSize: Integer;         // Total size of the field data
+    FFieldOffsets: array of Integer;  // Offset to field start in buffer
+    FModified: Boolean;               // Flag to show that workbook needs saving
+    FFilterBuffer: TRecordBuffer;     // Buffer for filtered record
+    FTableCreated: boolean;           // Flag telling that the table has been created
+    FAutoFieldDefs: Boolean;          // Automatically detect fielddefs in the worksheet
+    FAutoFieldDefStringSize: Integer; // Default size of automatically detected string fields
+    FIsOpen: boolean;                 // Flag storing that the dataset is open
+    FParser: TBufDatasetParser;       // Parser for filter expressions
+    FAutoIncValue: Integer;           // Automatically incremented value
+    FAutoIncField: TAutoIncField;     // Field which is automatically incremented
+    FSortParams: TsSortParams;        // Parameters for sorting
+    FAutoFileFormat: Boolean;         // Automatically detect the spreadsheet file format
+    FFileFormat: TsSpreadsheetFormat; // Format of the spreadsheet file
   private
     procedure CreateSortParams(const FieldNames: string;
       const Options: TsSortOptionsArray);
@@ -218,6 +221,8 @@ type
 
   published
     property AutoFieldDefs: Boolean read FAutoFieldDefs write FAutoFieldDefs default true;
+    property AutoFileFormat: Boolean read FAutoFileFormat write FAutoFileFormat default true;
+    property FileFormat: TsSpreadsheetFormat read FFileFormat write FFileFormat default sfUser;
     property FileName: TFileName read FFileName write FFileName;
     property SheetName: String read FSheetName write FSheetName;
 
@@ -472,6 +477,8 @@ constructor TsWorksheetDataset.Create(AOwner: TComponent);
 begin
   inherited;
   FAutoFieldDefs := true;
+  FAutoFileFormat := true;
+  FFileFormat := sfUser;
   FRecordCount := -1;
   FTotalFieldSize := -1;
   FRecordBufferSize := -1;
@@ -723,7 +730,10 @@ begin
     fd := FieldDefs[i] as TsFieldDef;
     FWorksheet.WriteText(0, fd.ColIndex, fd.Name);
   end;
-  FWorkbook.WriteToFile(FFileName, true);
+  if FAutoFileFormat then
+    FWorkbook.WriteToFile(FFileName, true)
+  else
+    FWorkbook.WriteToFile(FFileName, FFileFormat, true);
 
   FreeAndNil(FWorkbook);
   FWorksheet := nil;
@@ -1268,7 +1278,10 @@ begin
   FIsOpen := false;
 
   if FModified then begin
-    FWorkbook.WriteToFile(FFileName, true);
+    if FAutoFileFormat then
+      FWorkbook.WriteToFile(FFileName, true)
+    else
+      FWorkbook.WriteToFile(FFileName, FFileFormat, true);
     FModified := false;
   end;
   FreeWorkbook;
@@ -1352,7 +1365,10 @@ begin
       CreateTable;
     end else
     begin
-      FWorkbook.ReadFromFile(FFileName);
+      if FAutoFileFormat then
+        FWorkbook.ReadFromFile(FFileName)
+      else
+        FWorkbook.ReadFromFile(FFileName, FFileFormat);
       if FSheetName = '' then
       begin
         FWorksheet := FWorkbook.GetFirstWorksheet;
