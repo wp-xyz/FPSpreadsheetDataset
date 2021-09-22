@@ -121,6 +121,7 @@ begin
     FDataset.FieldDefs.Add('BoolCol', ftBoolean);
     FDataset.FieldDefs.Add('CurrencyCol', ftCurrency);
     FDataset.FieldDefs.Add('BCDCol', ftBCD);
+    FDataset.FieldDefs.Add('FmtBCDCol', ftFmtBCD);
   end;
 
   FDataset.Open;

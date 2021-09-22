@@ -23,8 +23,8 @@
   * Field defs defined by user: working (requires AutoFieldDefs = false)
   * Fields: working
   * Field types: ftFloat, ftInteger, ftAutoInc, ftByte, ftSmallInt, ftWord, ftLargeInt,
-    ftCurrency, ftBCD, ftDateTime, ftDate, ftTime, ftString, ftFixedChar, ftBoolean,
-    ftWideString, ftFixedWideString, ftMemo
+    ftCurrency, ftBCD, ftFmtBCD, ftDateTime, ftDate, ftTime, ftString, ftFixedChar,
+    ftBoolean, ftWideString, ftFixedWideString, ftMemo
   * Locate: working
   * Lookup: working
   * Edit, Delete, Insert, Append, Post, Cancel: working
@@ -271,13 +271,13 @@ uses
 
 const  // This are the field types of FPC 3.3.x
   ftSupported = [ftString, ftSmallint, ftInteger, ftWord, ftBoolean, ftFloat,
-    ftCurrency, ftBCD, ftDate,  ftTime, ftDateTime,
-    {ftBytes, ftVarBytes, }ftAutoInc, ftBlob, ftMemo,
+    ftCurrency, ftBCD, ftDate, ftTime, ftDateTime,
+    {ftBytes, ftVarBytes, } ftAutoInc, ftBlob, ftMemo,
     {ftGraphic, ftFmtMemo, ftParadoxOle, ftDBaseOle, ftTypedBinary, ftCursor, }
     ftFixedChar, ftWideString, ftLargeint,
     {ftADT, ftArray, ftReference, ftDataSet, ftOraBlob, ftOraClob, ftVariant,
-    ftInterface, ftIDispatch, ftGuid, ftTimeStamp, ftFMTBcd, }
-    ftFixedWideChar, ftWideMemo
+    ftInterface, ftIDispatch, ftGuid, ftTimeStamp,}
+    ftFMTBCD, ftFixedWideChar, ftWideMemo
     {
     , ftOraTimeStamp, ftOraInterval, ftLongWord, ftShortint,
     }
@@ -603,6 +603,8 @@ begin
         fs := SizeOf(Double);
       ftBCD:
         fs := SizeOf(Currency);   // BCD is expected by TBCDField as currency
+      ftFmtBCD:
+        fs := SizeOf(TBCD);       // The TFmtBCDField expects data as true TBCD.
       ftDateTime, ftDate, ftTime:
         fs := SizeOf(TDateTime);  // date/time values are TDateTime in the buffer
       ftBoolean:
@@ -1474,6 +1476,7 @@ var
   {%H-}li: LargeInt;
   {%H-}wb: WordBool;
   {%H-}c: Currency;
+  {%H-}bcd: TBCD;
   nullMask: Pointer;
   maxLen: Integer;
   fs: Integer;
@@ -1531,6 +1534,12 @@ begin
             begin
               c := cell^.NumberValue;
               Move(c, Buffer^, SizeOf(Currency));
+            end;
+          ftFmtBCD:
+            begin
+              c := cell^.NumberValue;
+              bcd := CurrToBCD(c);
+              Move(bcd, Buffer^, SizeOf(TBCD));
             end;
           ftInteger, ftAutoInc:
             begin
@@ -2031,6 +2040,7 @@ var
   P: Pointer;
   s: String = '';
   ws: WideString = '';
+  curr: Currency;
 begin
   row := GetCurrentRowIndex;
   P := Buffer;
@@ -2052,7 +2062,10 @@ begin
         ftCurrency:
           FWorksheet.WriteCurrency(cell, PDouble(P)^, nfCurrency, 2);
         ftBCD:
-          FWorksheet.WriteNumber(cell, PCurrency(P)^, nfFixed, TBCDField(field).Precision);
+          FWorksheet.WriteNumber(cell, PCurrency(P)^, nfFixed, TBCDField(field).Size);
+        ftFmtBCD:
+          if BCDToCurr(PBCD(P)^, curr) then
+            FWorksheet.WriteNumber(cell, curr, nfFixed, TFmtBCDField(field).Size);
         ftInteger, ftAutoInc:
           FWorksheet.WriteNumber(cell, PInteger(P)^);
         {$IF FPC_FullVersion >= 30300}
