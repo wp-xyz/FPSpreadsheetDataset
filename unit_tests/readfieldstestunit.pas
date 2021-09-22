@@ -30,6 +30,8 @@ type
     procedure ReadWordField;
     procedure ReadFloatField;
     procedure ReadCurrencyField;
+    procedure ReadBCDField;
+    procedure ReadFmtBCDField;
     procedure ReadStringField;
     procedure ReadMemoField;
     procedure ReadBoolField;
@@ -62,12 +64,14 @@ const
   WORD_COL = 2;
   FLOAT_COL = 3;
   CURRENCY_COL = 4;
-  STRING_COL = 5;
-  BOOL_COL = 6;
-  DATE_COL = 7;
-  TIME_COL = 8;
-  DATETIME_COL = 9;
-  MEMO_COL = 10;
+  BCD_COL = 5;
+  FMTBCD_COL = 6;
+  STRING_COL = 7;
+  BOOL_COL = 8;
+  DATE_COL = 9;
+  TIME_COL = 10;
+  DATETIME_COL = 11;
+  MEMO_COL = 12;
 
   TestText: array[0..3] of string = (
     'Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua',
@@ -98,6 +102,8 @@ begin
     Result.AddFieldDef('WordCol', ftWord);
     Result.AddFieldDef('FloatCol', ftFloat);
     Result.AddFieldDef('CurrencyCol', ftCurrency);
+    Result.AddFieldDef('BCDCol', ftBCD);
+    Result.AddFieldDef('FmtBCDCol', ftFmtBCD);
     Result.AddFieldDef('StringCol', ftString, 30);
     Result.AddFieldDef('BoolCol', ftBoolean);
     Result.AddFieldDef('DateCol', ftDate);
@@ -129,6 +135,8 @@ begin
     worksheet.WriteText(0, WORD_COL, 'WordCol');
     worksheet.WriteText(0, FLOAT_COL, 'FloatCol');
     worksheet.WriteText(0, CURRENCY_COL, 'CurrencyCol');
+    worksheet.WriteText(0, BCD_COL, 'BCDCol');
+    worksheet.WriteText(0, FMTBCD_Col, 'FmtBCDCol');
     worksheet.WriteText(0, STRING_COL, 'StringCol');
     worksheet.WriteText(0, BOOL_COL, 'BoolCol');
     worksheet.WriteText(0, DATE_COL, 'DateCol');
@@ -146,6 +154,10 @@ begin
       worksheet.WriteNumber(r, FLOAT_COL, r*1.1-5.1, nfFixed, 2);
       // Write values to CurrencyCol
       worksheet.WriteCurrency(r, CURRENCY_COL, r*1000, nfCurrency);
+      // Write values to BCDcol
+      worksheet.WriteNumber(r, BCD_COL, r*1.2-3);
+      // Write values to FmtBCDCol
+      worksheet.WriteNumber(r, FMTBCD_COL, r*12.3-60);
       // Write values to StringCol
       case r of
         1: s := 'Статья';
@@ -238,7 +250,7 @@ begin
             f.AsInteger,
             'Integer value mismatch in row ' + IntToStr(row)
           )
-        else if (f.DataType in [ftFloat, ftCurrency]) then
+        else if (f.DataType in [ftFloat, ftCurrency, ftBCD, ftFmtBCD]) then
           CheckEquals(
             worksheet.ReadAsNumber(row, col),
             f.AsFloat,
@@ -380,6 +392,16 @@ end;
 procedure TReadFieldsTest.ReadCurrencyField;
 begin
   ReadFieldTest(CURRENCY_COL, 'CurrencyCol', false);
+end;
+
+procedure TReadFieldsTest.ReadBCDField;
+begin
+  ReadFieldTest(BCD_COL, 'BCDCol', false);
+end;
+
+procedure TReadFieldsTest.ReadFmtBCDField;
+begin
+  ReadFieldTest(FMTBCD_COL, 'FmtBCDCol', false);
 end;
 
 procedure TReadFieldsTest.ReadStringField;
