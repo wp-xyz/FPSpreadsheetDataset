@@ -83,8 +83,8 @@ uses
 const
   DATA_FILE = '../TestData.xlsx';
 
-  AUTO_FIELD_DEFS = true;            // Select one of these two...
-//  AUTO_FIELD_DEFS = false;
+//  AUTO_FIELD_DEFS = true;            // Select one of these two...
+  AUTO_FIELD_DEFS = false;
 
 { TForm1 }
 
@@ -120,6 +120,7 @@ begin
     FDataset.FieldDefs.Add('DateCol', ftDate);
     FDataset.FieldDefs.Add('BoolCol', ftBoolean);
     FDataset.FieldDefs.Add('CurrencyCol', ftCurrency);
+    FDataset.FieldDefs.Add('BCDCol', ftBCD);
   end;
 
   FDataset.Open;

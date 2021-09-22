@@ -23,7 +23,7 @@
   * Field defs defined by user: working (requires AutoFieldDefs = false)
   * Fields: working
   * Field types: ftFloat, ftInteger, ftAutoInc, ftByte, ftSmallInt, ftWord, ftLargeInt,
-    ftCurrency, ftDateTime, ftDate, ftTime, ftString, ftFixedChar, ftBoolean,
+    ftCurrency, ftBCD, ftDateTime, ftDate, ftTime, ftString, ftFixedChar, ftBoolean,
     ftWideString, ftFixedWideString, ftMemo
   * Locate: working
   * Lookup: working
@@ -267,11 +267,11 @@ procedure Register;
 implementation
 
 uses
-  LazUTF8, LazUTF16, Math, TypInfo, Variants, fpsNumFormat;
+  LazUTF8, LazUTF16, Math, TypInfo, Variants, FmtBCD, fpsNumFormat;
 
 const  // This are the field types of FPC 3.3.x
   ftSupported = [ftString, ftSmallint, ftInteger, ftWord, ftBoolean, ftFloat,
-    ftCurrency, {ftBCD, } ftDate,  ftTime, ftDateTime,
+    ftCurrency, ftBCD, ftDate,  ftTime, ftDateTime,
     {ftBytes, ftVarBytes, }ftAutoInc, ftBlob, ftMemo,
     {ftGraphic, ftFmtMemo, ftParadoxOle, ftDBaseOle, ftTypedBinary, ftCursor, }
     ftFixedChar, ftWideString, ftLargeint,
@@ -599,8 +599,10 @@ begin
         fs := SizeOf(Word);
       ftLargeInt:
         fs := Sizeof(LargeInt);
-      ftFloat, ftCurrency:
+      ftFloat, ftCurrency:        // Currency is expected by TCurrencyField as double
         fs := SizeOf(Double);
+      ftBCD:
+        fs := SizeOf(Currency);   // BCD is expected by TBCDField as currency
       ftDateTime, ftDate, ftTime:
         fs := SizeOf(TDateTime);  // date/time values are TDateTime in the buffer
       ftBoolean:
@@ -869,11 +871,7 @@ begin
     end;
 
     // Add FieldDef and set its properties
-    TsFieldDef.Create(
-      TsFieldDefs(FieldDefs),
-      fn, ft, fs, false, FieldDefs.Count + 1, c
-      {$IF FPC_FullVersion >= 30200}, CP_UTF8{$IFEND}
-    );
+    AddFieldDef(fn, ft, fs, c, CP_UTF8);
   end;
 
   // Determine the offsets at which the field data will begin in the buffer.
@@ -1475,6 +1473,7 @@ var
   {%H-}w: word;
   {%H-}li: LargeInt;
   {%H-}wb: WordBool;
+  {%H-}c: Currency;
   nullMask: Pointer;
   maxLen: Integer;
   fs: Integer;
@@ -1528,6 +1527,11 @@ begin
         case field.DataType of
           ftFloat, ftCurrency:
             Move(cell^.NumberValue, Buffer^, SizeOf(cell^.NumberValue));
+          ftBCD:
+            begin
+              c := cell^.NumberValue;
+              Move(c, Buffer^, SizeOf(Currency));
+            end;
           ftInteger, ftAutoInc:
             begin
               i := Round(cell^.NumberValue);
@@ -2047,6 +2051,8 @@ begin
             FWorksheet.WriteNumber(cell, PDouble(P)^, nfFixed, TFloatField(field).Precision);
         ftCurrency:
           FWorksheet.WriteCurrency(cell, PDouble(P)^, nfCurrency, 2);
+        ftBCD:
+          FWorksheet.WriteNumber(cell, PCurrency(P)^, nfFixed, TBCDField(field).Precision);
         ftInteger, ftAutoInc:
           FWorksheet.WriteNumber(cell, PInteger(P)^);
         {$IF FPC_FullVersion >= 30300}
