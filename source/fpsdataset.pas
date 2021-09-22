@@ -199,6 +199,8 @@ type
     procedure Clear;
     procedure Clear(ClearDefs: Boolean);
     function CompareBookmarks(Bookmark1, Bookmark2: TBookmark): Longint; override;
+    procedure CopyFromDataset(ADataset: TDataset;
+      const AWorkbookFileName, ASheetName: String);
     function CreateBlobStream(Field: TField; Mode: TBlobStreamMode): TStream; override;
     procedure CreateTable;
     function GetFieldData(Field: TField; Buffer: Pointer): Boolean; override;
@@ -672,6 +674,112 @@ begin
     cell1 := PPCell(Bookmark1)^;
     cell2 := PPCell(Bookmark2)^;
     Result := Int64(cell1^.Row) - Int64(cell2^.Row);
+  end;
+end;
+
+{ Copies the specified dataset to the worksheet dataset: copies fielddefs as
+  well as data.
+  Important: In order to avoid data loss in the worksheet dataset it must be
+  closed and FileName and SheetName must be empty; they will be set to the
+  values passed as parameters. }
+procedure TsWorksheetDataset.CopyFromDataset(ADataset: TDataset;
+  const AWorkbookFileName, ASheetName: String);
+var
+  i: Integer;
+  fsrc, fdest: TField;
+  fd: TFieldDef;
+  stream: TMemoryStream;
+  bm: TBookmark;
+begin
+  if Active then
+    DatabaseError('Dataset must not be active when calling CopyFromDataset.');
+  if FFileName <> '' then
+    DatabaseError('Filename must be empty when calling CopyFromDataset.');
+  if FSheetName <> '' then
+    DatabaseError('SheetName must be empty when calling CopyFromDataset.');
+
+  FFileName := AWorkbookFileName;
+  FSheetName := ASheetName;
+
+  Fields.Clear;
+  FieldDefs.Clear;
+  for fsrc in ADataset.Fields do
+  begin
+    fd := AddFieldDef(fsrc.FieldName, fsrc.DataType, fsrc.Size, fsrc.FieldNo-1, CP_UTF8);
+    if fsrc is TAutoIncField then
+    begin
+      FAutoIncField := TAutoIncField(fsrc);
+      FAutoIncValue := -1;
+    end;
+  end;
+  CreateTable;
+
+  Open;
+  DisableControls;
+  ADataset.DisableControls;
+  bm := ADataset.GetBookmark;
+  stream := TMemoryStream.Create;
+  try
+    ADataset.Open;
+    ADataset.First;
+    while not ADataset.EoF do
+    begin
+      Append;
+      for i := 0 to FieldCount-1 do begin
+        fdest := Fields[i];
+        fsrc := ADataset.FieldByName(fdest.FieldName);
+        if not fsrc.IsNull then
+          case fdest.DataType of
+            ftString, ftFixedChar:
+              fdest.AsString := fsrc.AsString;
+            ftWideString, ftFixedWideChar:
+              fdest.AsWideString := fsrc.AsWideString;
+            ftBoolean:
+              fdest.AsBoolean := fsrc.AsBoolean;
+            ftFloat:
+              fdest.AsFloat := fsrc.AsFloat;
+            ftCurrency:
+              fdest.AsCurrency := fsrc.AsCurrency;
+            ftInteger, ftWord, ftSmallInt {, ftShortInt}
+            {$IF FPC_FullVersion >= 30300}, ftByte{$IFEND}:
+              fdest.AsInteger := fsrc.AsInteger;
+            ftAutoInc:
+              begin
+                fdest.AsInteger := fsrc.AsInteger;
+                FAutoIncValue := Max(fdest.AsInteger, FAutoIncValue);
+              end;
+            ftLargeInt:
+              fdest.AsLargeInt := fsrc.AsLargeInt;
+            ftDate, ftTime, ftDateTime:
+              fdest.AsDateTime := fsrc.AsDateTime;
+            ftBCD, ftFmtBCD:
+              fdest.AsBCD := fsrc.AsBCD;
+            ftMemo:
+              begin
+                stream.Clear;
+                TBlobField(fsrc).SaveToStream(stream);
+                stream.Position := 0;
+                TBlobField(fdest).LoadFromStream(stream);
+              end;
+            else
+              fdest.AsString := fsrc.AsString;
+          end;
+      end;
+      try
+        Post;
+      except
+        Cancel;
+        raise;
+      end;
+      ADataset.Next;
+    end;
+    inc(FAutoIncValue);
+    FModified := true;
+  finally
+    stream.Free;
+    ADataset.GotoBookmark(bm);
+    ADataset.EnableControls;
+    EnableControls;
   end;
 end;
 
